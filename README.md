@@ -33,7 +33,7 @@ Choosing a CLI parser in Rust usually feels like a compromise:
 | Env var fallback | ✓ | ✓ | ✓ | ✗ | ✗ |
 | Multi-value options | ✓ | ✓ | ✓ | ✗ | ✗ |
 | Subcommands | ✓ | ✓ | ✓ | ✗† | ✗† |
-| Combined short flags (`-abc`) | ✓ | ✓ | ✓ | ✓‡ | ✓ |
+| Combined short flags (`-abc`) | ✓ | ✓ | ✓ | ✓§ | ✓ |
 | Default values | ✓ | ✓ | ✓ | ✗ | ✗ |
 | Required args | ✓ | ✓ | ✓ | ✗ | ✗ |
 | Hidden args | ✓ | ✓ | ✓ | — | — |
@@ -45,7 +45,6 @@ Choosing a CLI parser in Rust usually feels like a compromise:
 \* `clap` with default features. With derive, ~17 total.
 \*\* `bpaf` combinatoric API has 0 deps. With derive, 5 total (`bpaf_derive` + `syn` tree).
 † No built-in support. Achievable manually by matching on positional tokens.
-‡ Via opt-in cargo features (`combined-flags`, `short-space-opt`).
 § Via opt-in cargo features.
 
 Which one should I use?
