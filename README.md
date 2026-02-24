@@ -55,36 +55,28 @@ cargo add nanoargs
 ```
 
 ```rust
-use nanoargs::{ArgBuilder, Flag, Opt, Pos, ParseError};
+use nanoargs::{ArgBuilder, Flag, Opt, Pos};
 
-fn main() {
-    let parser = ArgBuilder::new()
-        .name("myapp")
-        .description("A sample CLI tool")
-        .flag(Flag::new("verbose").desc("Enable verbose output").short('v'))
-        .option(Opt::new("output").placeholder("FILE").desc("Output file path"))
-        .positional(Pos::new("input").desc("Input file").required())
-        .build()
-        .unwrap();
+let parser = ArgBuilder::new()
+    .name("myapp")
+    .description("A sample CLI tool")
+    .version("1.0.0")
+    .flag(Flag::new("verbose").desc("Enable verbose output").short('v'))
+    .option(Opt::new("output").placeholder("FILE").desc("Output file path").short('o'))
+    .positional(Pos::new("input").desc("Input file").required())
+    .build()
+    .unwrap();
 
-    let args: Vec<String> = std::env::args().skip(1).collect();
+let result = parser.parse_env()?;
 
-    match parser.parse(args) {
-        Ok(result) => {
-            println!("verbose: {}", result.get_flag("verbose"));
-            println!("output:  {:?}", result.get_option("output"));
-            println!("input:   {:?}", result.get_positionals());
-        }
-        Err(ParseError::HelpRequested(text)) => print!("{}", text),
-        Err(ParseError::VersionRequested(text)) => println!("{}", text),
-        Err(e) => eprintln!("error: {}", e),
-    }
-}
+println!("verbose: {}", result.get_flag("verbose"));
+println!("output:  {:?}", result.get_option("output"));
+println!("input:   {:?}", result.get_positionals());
 ```
 
-Or for throwaway scripts, see [Schema-Free Parsing](#schema-free-parsing-for-quick-scripts) below.
+See [Parsing and Results](#parsing-and-results) and [Error Handling](#error-handling) for working with parse results.
 
-## Usage
+## Defining Arguments
 
 ### Flags ([example](examples/flags.rs))
 
@@ -120,6 +112,21 @@ myapp --output result.txt --jobs 8 --include src --include tests
 myapp -o=result.txt -j 8
 ```
 
+### Positionals ([example](examples/positionals.rs))
+
+Unnamed arguments collected in order. Chain `.required()` on the `Pos` builder to make a positional mandatory.
+
+```rust
+let parser = ArgBuilder::new()
+    .positional(Pos::new("input").desc("Input file").required())
+    .positional(Pos::new("extra").desc("Additional arguments"))
+    .build();
+```
+
+```sh
+myapp input.txt extra1 extra2
+```
+
 ### Environment Variable Fallback ([example](examples/env_fallback.rs))
 
 Options can fall back to environment variables when not provided on the command line. Chain `.env()` on the `Opt` builder. The resolution order is: CLI value → env var → default → error (if required).
@@ -150,21 +157,6 @@ Options:
   -l, --log-level <LEVEL>  Log level [env: MYAPP_LOG_LEVEL]
   -o, --output <FILE>      Output file (required) [env: MYAPP_OUTPUT]
   -f, --format <FMT>       Output format [default: text] [env: MYAPP_FORMAT]
-```
-
-### Positionals ([example](examples/positionals.rs))
-
-Unnamed arguments collected in order. Chain `.required()` on the `Pos` builder to make a positional mandatory.
-
-```rust
-let parser = ArgBuilder::new()
-    .positional(Pos::new("input").desc("Input file").required())
-    .positional(Pos::new("extra").desc("Additional arguments"))
-    .build();
-```
-
-```sh
-myapp input.txt extra1 extra2
 ```
 
 ### Hidden Arguments
@@ -259,15 +251,6 @@ myapp build --help        # subcommand-specific help
 > myapp file.txt build    # "file.txt" is treated as an unknown subcommand
 > ```
 
-Access results via `subcommand()` and `subcommand_result()`:
-
-```rust
-if let Some("build") = result.subcommand() {
-    let sub = result.subcommand_result().unwrap();
-    println!("release: {}", sub.get_flag("release"));
-}
-```
-
 ### Version Flag ([example](examples/version_flag.rs))
 
 Built-in `--version` / `-V` support. Set a version string on the builder and the parser handles the rest.
@@ -292,6 +275,35 @@ myapp 0.1.0
 The `-V` short flag is reserved when a version is configured — the builder will reject any user-registered flag or option that uses `'V'` as its short form. When no version is set, `--version` and `-V` are treated as unknown arguments, and `'V'` is available for user flags.
 
 When both `--help` and `--version` appear, whichever comes first wins. After `--`, both are treated as positionals.
+
+## Parsing and Results
+
+### Accessors
+
+`parse_env()` reads from `std::env::args()` and returns a `Result<ParseResult, ParseError>`:
+
+```rust
+let result = parser.parse_env()?;
+
+// Flags return bool
+let verbose = result.get_flag("verbose");
+
+// Options return Option<&str>
+let output = result.get_option("output");
+
+// Multi-value options return &[String]
+let tags = result.get_option_values("tags");
+
+// Positionals in order
+let positionals = result.get_positionals();
+
+// Subcommand access
+if let Some(name) = result.subcommand() {
+    let sub = result.subcommand_result().unwrap();
+}
+```
+
+You can also pass your own args with `parser.parse(args)` — see [Error Handling](#error-handling) for the full match pattern.
 
 ### Typed Parsing
 
@@ -318,6 +330,25 @@ match result.get_option_parsed::<u32>("jobs") {
 }
 ```
 
+### Error Handling ([example](examples/error_handling.rs))
+
+```rust
+match parser.parse(args) {
+    Ok(result) => { /* use result */ }
+    Err(ParseError::HelpRequested(text)) => print!("{}", text),
+    Err(ParseError::VersionRequested(text)) => println!("{}", text),
+    Err(ParseError::MissingRequired(name)) => eprintln!("missing: {}", name),
+    Err(ParseError::MissingValue(name)) => eprintln!("no value for: --{}", name),
+    Err(ParseError::UnknownArgument(token)) => eprintln!("unknown: {}", token),
+    Err(ParseError::NoSubcommand(msg)) => eprintln!("{}", msg),
+    Err(ParseError::UnknownSubcommand(name)) => eprintln!("unknown subcommand: {}", name),
+    Err(ParseError::DuplicateOption(name)) => eprintln!("duplicate: --{}", name),
+    Err(ParseError::InvalidFormat(msg)) => eprintln!("bad format: {}", msg),
+}
+```
+
+## Help and Output
+
 ### Help Text ([example](examples/help_text.rs))
 
 Auto-generated from your schema. Triggered by `--help` or `-h`.
@@ -336,15 +367,6 @@ Options:
   -h, --help             Print help
 ```
 
-### Double-Dash Separator
-
-Everything after `--` is treated as a positional, even if it looks like a flag or option.
-
-```sh
-myapp -- --not-a-flag -abc
-# positionals: ["--not-a-flag", "-abc"]
-```
-
 ### Colored Help (opt-in)
 
 Enable the `color` feature to get ANSI-colored help text and error messages via [nanocolor](https://github.com/anthonysgro/nanocolor):
@@ -360,24 +382,16 @@ cargo run --example help_text --features color -- --help
 
 When enabled, section headers are bold yellow, flag/option names are green, placeholders are cyan, and metadata like `[default: ...]` is dim. Error messages get a bold red `error:` prefix. Color is automatically suppressed when `NO_COLOR` is set or output is not a TTY (handled by nanocolor). Without the feature, the crate remains zero-dependency and output is unchanged.
 
-### Error Handling ([example](examples/error_handling.rs))
+### Double-Dash Separator
 
-```rust
-match parser.parse(args) {
-    Ok(result) => { /* use result */ }
-    Err(ParseError::HelpRequested(text)) => print!("{}", text),
-    Err(ParseError::VersionRequested(text)) => println!("{}", text),
-    Err(ParseError::MissingRequired(name)) => eprintln!("missing: {}", name),
-    Err(ParseError::MissingValue(name)) => eprintln!("no value for: --{}", name),
-    Err(ParseError::UnknownArgument(token)) => eprintln!("unknown: {}", token),
-    Err(ParseError::NoSubcommand(msg)) => eprintln!("{}", msg),
-    Err(ParseError::UnknownSubcommand(name)) => eprintln!("unknown subcommand: {}", name),
-    Err(ParseError::DuplicateOption(name)) => eprintln!("duplicate: --{}", name),
-    Err(ParseError::InvalidFormat(msg)) => eprintln!("bad format: {}", msg),
-}
+Everything after `--` is treated as a positional, even if it looks like a flag or option.
+
+```sh
+myapp -- --not-a-flag -abc
+# positionals: ["--not-a-flag", "-abc"]
 ```
 
-### Schema-Free Parsing for Quick Scripts
+## Schema-Free Parsing for Quick Scripts
 
 `parse_loose()` skips the schema entirely — useful for throwaway scripts where defining flags and options feels like overkill.
 
