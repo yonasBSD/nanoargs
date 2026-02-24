@@ -370,3 +370,159 @@ fn version_after_subcommand_handled_by_subcommand() {
         other => panic!("expected VersionRequested from subcommand, got: {other}"),
     }
 }
+
+// ── free::parse_loose_from coverage ──────────────────────────────────────
+
+#[test]
+fn loose_long_option_with_value() {
+    let args = vec!["--output".into(), "file.txt".into()];
+    let result = crate::free::parse_loose_from(args).unwrap();
+    assert_eq!(result.get_option("output"), Some("file.txt"));
+}
+
+#[test]
+fn loose_long_flag_no_value() {
+    let args = vec!["--verbose".into(), "--debug".into()];
+    let result = crate::free::parse_loose_from(args).unwrap();
+    assert!(result.get_flag("verbose"));
+    assert!(result.get_flag("debug"));
+}
+
+#[test]
+fn loose_long_option_equals_syntax() {
+    let args = vec!["--output=file.txt".into()];
+    let result = crate::free::parse_loose_from(args).unwrap();
+    assert_eq!(result.get_option("output"), Some("file.txt"));
+}
+
+#[test]
+fn loose_short_option_with_value() {
+    let args = vec!["-o".into(), "file.txt".into()];
+    let result = crate::free::parse_loose_from(args).unwrap();
+    assert_eq!(result.get_option("o"), Some("file.txt"));
+}
+
+#[test]
+fn loose_short_flag_no_value() {
+    let args = vec!["-v".into(), "-d".into()];
+    let result = crate::free::parse_loose_from(args).unwrap();
+    assert!(result.get_flag("v"));
+    assert!(result.get_flag("d"));
+}
+
+#[test]
+fn loose_short_option_equals_syntax() {
+    let args = vec!["-o=file.txt".into()];
+    let result = crate::free::parse_loose_from(args).unwrap();
+    assert_eq!(result.get_option("o"), Some("file.txt"));
+}
+
+#[test]
+fn loose_positional_args() {
+    let args = vec!["hello".into(), "world".into()];
+    let result = crate::free::parse_loose_from(args).unwrap();
+    assert_eq!(result.get_positionals(), &["hello", "world"]);
+}
+
+#[test]
+fn loose_double_dash_stops_parsing() {
+    let args = vec!["--verbose".into(), "--".into(), "--not-a-flag".into()];
+    let result = crate::free::parse_loose_from(args).unwrap();
+    assert!(result.get_flag("verbose"));
+    assert_eq!(result.get_positionals(), &["--not-a-flag"]);
+}
+
+#[test]
+fn loose_help_flag_returns_error() {
+    let args = vec!["--help".into()];
+    let err = crate::free::parse_loose_from(args).unwrap_err();
+    match err {
+        ParseError::HelpRequested(text) => assert!(text.contains("Usage")),
+        other => panic!("expected HelpRequested, got: {other}"),
+    }
+}
+
+#[test]
+fn loose_short_help_flag_returns_error() {
+    let args = vec!["-h".into()];
+    let err = crate::free::parse_loose_from(args).unwrap_err();
+    match err {
+        ParseError::HelpRequested(_) => {}
+        other => panic!("expected HelpRequested, got: {other}"),
+    }
+}
+
+#[test]
+fn loose_mixed_args() {
+    let args = vec![
+        "--verbose".into(),
+        "-o".into(),
+        "out.txt".into(),
+        "positional".into(),
+        "--".into(),
+        "--rest".into(),
+    ];
+    let result = crate::free::parse_loose_from(args).unwrap();
+    assert!(result.get_flag("verbose"));
+    assert_eq!(result.get_option("o"), Some("out.txt"));
+    assert_eq!(result.get_positionals(), &["positional", "--rest"]);
+}
+
+#[test]
+fn loose_empty_args() {
+    let result = crate::free::parse_loose_from(vec![]).unwrap();
+    assert!(result.get_positionals().is_empty());
+    assert!(!result.get_flag("anything"));
+}
+
+#[test]
+fn loose_flag_when_next_starts_with_dash() {
+    // --output followed by -v should treat --output as a flag
+    let args = vec!["--output".into(), "-v".into()];
+    let result = crate::free::parse_loose_from(args).unwrap();
+    assert!(result.get_flag("output"));
+    assert!(result.get_flag("v"));
+}
+
+// ── ParseResultBuilder coverage ──────────────────────────────────────────
+
+#[test]
+fn result_builder_new_and_multi_option() {
+    let result =
+        ParseResultBuilder::new().multi_option("tags", "a").multi_option("tags", "b").multi_option("tags", "c").build();
+    assert_eq!(result.get_option_values("tags"), &["a", "b", "c"]);
+    // get_option returns last value
+    assert_eq!(result.get_option("tags"), Some("c"));
+}
+
+#[test]
+fn result_builder_subcommand() {
+    let sub = ParseResultBuilder::new().flag("verbose", true).build();
+    let result = ParseResultBuilder::new().subcommand("run", sub).build();
+    assert_eq!(result.subcommand(), Some("run"));
+    assert!(result.subcommand_result().unwrap().get_flag("verbose"));
+}
+
+// ── OptionError Display coverage ─────────────────────────────────────────
+
+#[test]
+fn option_error_missing_display() {
+    let err = OptionError::Missing { option: "port".into() };
+    assert_eq!(err.to_string(), "option --port is required but was not provided");
+}
+
+#[test]
+fn option_error_parse_failed_display() {
+    let err = OptionError::ParseFailed {
+        option: "port".into(),
+        message: "invalid digit".into(),
+    };
+    assert_eq!(err.to_string(), "option --port: invalid digit");
+}
+
+#[test]
+fn option_error_is_std_error() {
+    let err = OptionError::Missing { option: "x".into() };
+    // Verify it implements std::error::Error
+    let _: &dyn std::error::Error = &err;
+}

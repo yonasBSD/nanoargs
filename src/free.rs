@@ -43,7 +43,7 @@ pub fn parse_loose() -> Result<ParseResult, ParseError> {
 /// misclassify edge cases (e.g. `--output -v` treats `--output` as a flag
 /// and `-v` as a separate token). Callers who need exact semantics should use
 /// [`ArgBuilder`](crate::ArgBuilder).
-fn parse_loose_from(args: Vec<String>) -> Result<ParseResult, ParseError> {
+pub(crate) fn parse_loose_from(args: Vec<String>) -> Result<ParseResult, ParseError> {
     let mut flag_values: HashMap<String, bool> = HashMap::new();
     let mut option_values: HashMap<String, Option<String>> = HashMap::new();
     let mut positional_values: Vec<String> = Vec::new();
