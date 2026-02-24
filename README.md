@@ -12,14 +12,7 @@ A lightweight, zero-dependency argument parser for Rust.
   <img src="demo.gif" alt="nanoargs help output" width="700" />
 </p>
 
-Part of the nano crate family — minimal, zero-dependency building blocks for Rust:
-
-- [nanocolor](https://github.com/anthonysgro/nanocolor) — terminal colors and styles
-- [nanospinner](https://github.com/anthonysgro/nanospinner) — terminal spinners
-- [nanoprogress](https://github.com/anthonysgro/nanoprogress) — progress bars
-- [nanologger](https://github.com/anthonysgro/nanologger) — minimal logger
-- [nanotime](https://github.com/anthonysgro/nanotime) — time utilities
-- [nanoargs](https://github.com/anthonysgro/nanoargs) — argument parser
+Part of the [nano](https://github.com/anthonysgro/nano) crate family — minimal, zero-dependency building blocks for Rust.
 
 Everything you'd expect from a CLI parser — flags, options, subcommands, help generation, env fallback, typed parsing — with zero dependencies.
 
