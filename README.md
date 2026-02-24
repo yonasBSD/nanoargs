@@ -18,9 +18,12 @@ Everything you'd expect from a CLI parser — flags, options, subcommands, help 
 
 ## Why nanoargs?
 
-`clap` pulls in 10+ transitive dependencies. `pico-args` and `lexopt` are zero-dep but skip help generation, env var fallback, and subcommands. nanoargs covers the gap: everything you'd reach for `clap` for in a typical CLI, with zero dependencies.
+Choosing a CLI parser in Rust usually feels like a compromise:
 
-If your CLI needs advanced features like derive macros, argument groups, shell completions, or value validation, `clap` and `bpaf` are great choices. nanoargs is for the common, lightweight case.
+- `clap` is the gold standard, but it's a heavy lift. It pulls in 10+ transitive dependencies, deep customization and vast api reference sheets.
+- `pico-args` / `lexopt` are zero-dep, but they leave the hard work to you. You'll end up hand-coding your own --help strings, ENV fallbacks, and subcommand logic.
+- `nanoargs` is the middle ground. You get the professional features you actually use like subcommands, help generation, and env fallbacks, with **zero** dependencies.
+
 
 | Feature | `nanoargs` | `clap` | `bpaf` | `pico-args` | `lexopt` |
 |---------|:----------:|:------:|:------:|:-----------:|:--------:|
@@ -39,14 +42,17 @@ If your CLI needs advanced features like derive macros, argument groups, shell c
 | Shell completions | ✗ | ✓ | ✓§ | ✗ | ✗ |
 | Other advanced features | ✗ | ✓ | ✓ | ✗ | ✗ |
 
-
-
 \* `clap` with default features. With derive, ~17 total.
 \*\* `bpaf` combinatoric API has 0 deps. With derive, 5 total (`bpaf_derive` + `syn` tree).
 † No built-in support. Achievable manually by matching on positional tokens.
 ‡ Via opt-in cargo features (`combined-flags`, `short-space-opt`).
 § Via opt-in cargo features.
 
+Which one should I use?
+
+- `clap` / `bpaf`: Your CLI is complex and needs deep customization and advanced support.
+- `pico-args` / `lexopt`: You’re building something tiny where most features aren't a priority.
+- `nanoargs`: You want a clean, intuitive API that supports 90% of use cases without taking on any dependencies.
 
 ## Quick Start ([full demo](examples/full_demo.rs))
 
@@ -55,26 +61,33 @@ cargo add nanoargs
 ```
 
 ```rust
-use nanoargs::{ArgBuilder, Flag, Opt, Pos};
+use nanoargs::{ArgBuilder, Flag, Opt, Pos, ParseError};
 
-let parser = ArgBuilder::new()
-    .name("myapp")
-    .description("A sample CLI tool")
-    .version("1.0.0")
-    .flag(Flag::new("verbose").desc("Enable verbose output").short('v'))
-    .option(Opt::new("output").placeholder("FILE").desc("Output file path").short('o'))
-    .positional(Pos::new("input").desc("Input file").required())
-    .build()
-    .unwrap();
+fn main() {
+    let parser = ArgBuilder::new()
+        .name("myapp")
+        .description("A sample CLI tool")
+        .version("1.0.0")
+        .flag(Flag::new("verbose").desc("Enable verbose output").short('v'))
+        .option(Opt::new("output").placeholder("FILE").desc("Output file path").short('o'))
+        .positional(Pos::new("input").desc("Input file").required())
+        .build()
+        .unwrap();
 
-let result = parser.parse_env()?;
-
-println!("verbose: {}", result.get_flag("verbose"));
-println!("output:  {:?}", result.get_option("output"));
-println!("input:   {:?}", result.get_positionals());
+    match parser.parse_env() {
+        Ok(result) => {
+            println!("verbose: {}", result.get_flag("verbose"));
+            println!("output:  {:?}", result.get_option("output"));
+            println!("input:   {:?}", result.get_positionals());
+        }
+        Err(ParseError::HelpRequested(text)) => print!("{text}"),
+        Err(ParseError::VersionRequested(text)) => println!("{text}"),
+        Err(e) => eprintln!("error: {e}"),
+    }
+}
 ```
 
-See [Parsing and Results](#parsing-and-results) and [Error Handling](#error-handling) for working with parse results.
+See [Parsing and Results](#parsing-and-results) and [Error Handling](#error-handling) for more details.
 
 ## Defining Arguments
 
