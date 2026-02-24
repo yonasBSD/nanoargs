@@ -526,3 +526,66 @@ fn option_error_is_std_error() {
     // Verify it implements std::error::Error
     let _: &dyn std::error::Error = &err;
 }
+
+// ── debug_assert! typo-detection tests ─────────────────────────────────────
+
+#[test]
+#[should_panic(expected = "unknown flag")]
+fn debug_assert_get_flag_unknown_name_panics() {
+    let parser = ArgBuilder::new().flag(Flag::new("verbose")).build().unwrap();
+    let result = parser.parse(vec![]).unwrap();
+    let _ = result.get_flag("verbos"); // typo → panic
+}
+
+#[test]
+#[should_panic(expected = "unknown option")]
+fn debug_assert_get_option_unknown_name_panics() {
+    let parser = ArgBuilder::new().option(Opt::new("output")).build().unwrap();
+    let result = parser.parse(vec![]).unwrap();
+    let _ = result.get_option("outpt"); // typo → panic
+}
+
+#[test]
+#[should_panic(expected = "unknown option")]
+fn debug_assert_get_option_values_unknown_name_panics() {
+    let parser = ArgBuilder::new().option(Opt::new("files").multi()).build().unwrap();
+    let result = parser.parse(vec![]).unwrap();
+    let _ = result.get_option_values("filez"); // typo → panic
+}
+
+#[test]
+fn debug_assert_get_flag_known_name_does_not_panic() {
+    let parser = ArgBuilder::new().flag(Flag::new("verbose")).build().unwrap();
+    let result = parser.parse(vec![]).unwrap();
+    assert!(!result.get_flag("verbose")); // correct name → no panic
+}
+
+#[test]
+fn debug_assert_get_option_known_name_does_not_panic() {
+    let parser = ArgBuilder::new().option(Opt::new("output")).build().unwrap();
+    let result = parser.parse(vec![]).unwrap();
+    assert_eq!(result.get_option("output"), None); // correct name → no panic
+}
+
+#[test]
+fn debug_assert_loose_parse_skips_check() {
+    // parse_loose has no schema, so any name should work without panic
+    let result = crate::free::parse_loose_from(vec!["--foo".into(), "bar".into()]).unwrap();
+    assert!(!result.get_flag("nonexistent")); // no schema → no panic
+    assert_eq!(result.get_option("also_nonexistent"), None);
+}
+
+#[test]
+#[should_panic(expected = "unknown flag")]
+fn debug_assert_builder_result_catches_typo() {
+    // ParseResultBuilder also sets known names
+    let result = ParseResultBuilder::new().flag("verbose", true).build();
+    let _ = result.get_flag("verbos"); // typo → panic
+}
+
+#[test]
+fn debug_assert_builder_result_known_name_ok() {
+    let result = ParseResultBuilder::new().flag("verbose", true).option("output", "file.txt").build();
+    assert!(result.get_flag("verbose"));
+    assert_eq!(result.get_option("output"), Some("file.txt"));
+}

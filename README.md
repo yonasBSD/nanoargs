@@ -315,6 +315,8 @@ if let Some(name) = result.subcommand() {
 }
 ```
 
+Accessors like `get_flag` and `get_option` use string keys, so a typo like `get_flag("verbos")` would silently return `false`. To catch these during development, nanoargs includes `debug_assert!` checks that panic if you access a name that was never registered. These checks run automatically in debug builds (`cargo test`, `cargo run`) and are stripped in release builds with zero overhead.
+
 You can also pass your own args with `parser.parse(args)` — see [Error Handling](#error-handling) for the full match pattern.
 
 ### Typed Parsing

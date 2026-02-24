@@ -12,6 +12,10 @@ pub struct ParseResult {
     positionals: Vec<String>,
     subcommand: Option<String>,
     subcommand_result: Option<Box<ParseResult>>,
+    /// Known flag and option names from the schema (empty for schema-free parsing).
+    /// Used by `debug_assert!` checks to catch typos during development.
+    known_flags: Vec<String>,
+    known_options: Vec<String>,
 }
 
 /// Builder for constructing a [`ParseResult`] manually.
@@ -79,15 +83,23 @@ impl ParseResultBuilder {
     }
 
     /// Build the [`ParseResult`].
+    ///
+    /// The resulting `ParseResult` will have schema metadata derived from the
+    /// builder's flags and options, so `debug_assert!` typo checks work in
+    /// test code too.
     #[must_use]
     pub fn build(self) -> ParseResult {
-        ParseResult::new(
+        let known_flags: Vec<String> = self.flags.keys().cloned().collect();
+        let known_options: Vec<String> = self.option_values.keys().cloned().collect();
+        let mut result = ParseResult::new(
             self.flags,
             self.option_values,
             self.positionals,
             self.subcommand,
             self.subcommand_result,
-        )
+        );
+        result.set_known_names(known_flags, known_options);
+        result
     }
 }
 
@@ -106,23 +118,61 @@ impl ParseResult {
             positionals,
             subcommand,
             subcommand_result,
+            known_flags: Vec::new(),
+            known_options: Vec::new(),
         }
     }
 
+    /// Internal: attach known names from the schema so accessors can
+    /// `debug_assert!` against typos. Called by the parser after construction.
+    pub(crate) fn set_known_names(&mut self, flags: Vec<String>, options: Vec<String>) {
+        self.known_flags = flags;
+        self.known_options = options;
+    }
+
+    /// Returns `true` when schema metadata is present (i.e. the result was
+    /// produced by the schema-based parser, not `parse_loose`).
+    fn has_schema(&self) -> bool {
+        !self.known_flags.is_empty() || !self.known_options.is_empty()
+    }
+
     /// Returns `true` if the flag was provided, `false` otherwise.
+    ///
+    /// In debug builds, panics if `name` was never registered as a flag.
+    /// This catches typos like `get_flag("verbos")` during development.
     pub fn get_flag(&self, name: &str) -> bool {
+        debug_assert!(
+            !self.has_schema() || self.known_flags.iter().any(|f| f == name),
+            "get_flag(\"{name}\"): unknown flag. Known flags: {:?}",
+            self.known_flags
+        );
         self.flags.get(name).copied().unwrap_or(false)
     }
 
     /// Returns the last value for an option, or `None` if absent.
+    ///
+    /// In debug builds, panics if `name` was never registered as an option.
+    /// This catches typos like `get_option("outpt")` during development.
     pub fn get_option(&self, name: &str) -> Option<&str> {
+        debug_assert!(
+            !self.has_schema() || self.known_options.iter().any(|o| o == name),
+            "get_option(\"{name}\"): unknown option. Known options: {:?}",
+            self.known_options
+        );
         self.option_values.get(name)?.last().map(|s| s.as_str())
     }
 
     /// Returns all collected values for an option. For single-value options this
     /// is a one-element slice; for multi-value options it contains every collected
     /// value in order; for absent options it returns an empty slice.
+    ///
+    /// In debug builds, panics if `name` was never registered as an option.
     pub fn get_option_values(&self, name: &str) -> &[String] {
+        debug_assert!(
+            !self.has_schema() || self.known_options.iter().any(|o| o == name),
+            "get_option_values(\"{name}\"): unknown option. Known options: {:?}",
+            self.known_options
+        );
         self.option_values.get(name).map_or(&[], |v| v.as_slice())
     }
 
@@ -154,8 +204,14 @@ impl ParseResult {
         self.subcommand_result.as_deref()
     }
 
-    /// Returns the parsed value, or `default` if the option is absent or
-    /// its value fails to parse.
+    /// Returns the parsed value, or `default` if the option is absent **or
+    /// its value fails to parse**.
+    ///
+    /// This is a convenience helper that silently falls back to `default`
+    /// on parse failure — `--jobs abc` with a `u32` target quietly returns
+    /// the default, not an error. If you need to distinguish "absent" from
+    /// "bad input", use [`get_option_parsed`] or [`get_option_required`]
+    /// instead.
     pub fn get_option_or_default<T: FromStr>(&self, name: &str, default: T) -> T {
         match self.get_option(name) {
             Some(v) => v.parse::<T>().unwrap_or(default),
@@ -164,7 +220,11 @@ impl ParseResult {
     }
 
     /// Returns the parsed value, or calls `f` to produce a fallback if the
-    /// option is absent or its value fails to parse.
+    /// option is absent **or its value fails to parse**.
+    ///
+    /// Like [`get_option_or_default`](Self::get_option_or_default), parse
+    /// errors are silently swallowed. Use [`get_option_parsed`] or
+    /// [`get_option_required`] when bad input should be surfaced.
     pub fn get_option_or<T: FromStr, F: FnOnce() -> T>(&self, name: &str, f: F) -> T {
         match self.get_option(name) {
             Some(v) => v.parse::<T>().unwrap_or_else(|_| f()),
@@ -190,7 +250,11 @@ impl ParseResult {
     }
 
     /// Returns all values parsed into `T`, or `default` if the option is
-    /// absent or any value fails to parse.
+    /// absent **or any value fails to parse**.
+    ///
+    /// Parse errors are silently swallowed — if any single value is
+    /// unparseable, the entire result falls back to `default`. Use
+    /// [`get_option_values_parsed`] for fine-grained error handling.
     pub fn get_option_values_or_default<T: FromStr>(&self, name: &str, default: Vec<T>) -> Vec<T> {
         let raw = self.get_option_values(name);
         if raw.is_empty() {

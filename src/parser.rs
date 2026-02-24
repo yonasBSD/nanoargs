@@ -75,10 +75,16 @@ impl ArgParser {
     /// `-V`/`--version` are encountered — these are not errors per se,
     /// but signal that the caller should print the contained text and exit.
     pub fn parse(&self, args: Vec<String>) -> Result<ParseResult, ParseError> {
-        if self.subcommands.is_empty() {
-            return self.parse_no_subcommands(args);
-        }
-        self.parse_with_subcommands(args)
+        let mut result = if self.subcommands.is_empty() {
+            self.parse_no_subcommands(args)?
+        } else {
+            self.parse_with_subcommands(args)?
+        };
+        result.set_known_names(
+            self.flags.iter().map(|f| f.long.clone()).collect(),
+            self.options.iter().map(|o| o.long.clone()).collect(),
+        );
+        Ok(result)
     }
 
     /// Store an option value into the unified map. For multi-value options,
