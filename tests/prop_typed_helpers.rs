@@ -73,7 +73,6 @@ proptest! {
     }
 }
 
-
 // Feature: typed-option-helpers, Property 4: get_option_or returns closure result on absent or unparseable
 // **Validates: Requirements 2.2, 2.3**
 proptest! {

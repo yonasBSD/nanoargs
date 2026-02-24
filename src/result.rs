@@ -100,7 +100,13 @@ impl ParseResult {
         subcommand: Option<String>,
         subcommand_result: Option<Box<ParseResult>>,
     ) -> Self {
-        Self { flags, option_values, positionals, subcommand, subcommand_result }
+        Self {
+            flags,
+            option_values,
+            positionals,
+            subcommand,
+            subcommand_result,
+        }
     }
 
     /// Returns `true` if the flag was provided, `false` otherwise.
@@ -185,11 +191,7 @@ impl ParseResult {
 
     /// Returns all values parsed into `T`, or `default` if the option is
     /// absent or any value fails to parse.
-    pub fn get_option_values_or_default<T: FromStr>(
-        &self,
-        name: &str,
-        default: Vec<T>,
-    ) -> Vec<T> {
+    pub fn get_option_values_or_default<T: FromStr>(&self, name: &str, default: Vec<T>) -> Vec<T> {
         let raw = self.get_option_values(name);
         if raw.is_empty() {
             return default;
@@ -223,4 +225,3 @@ impl std::fmt::Display for OptionError {
 }
 
 impl std::error::Error for OptionError {}
-
