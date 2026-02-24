@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2ff2d9a39fe8a98b3ccdfe0cbc49a7c799a2221c54d52aac7a8eff95d2c5560c # shrinks to flag_long = "fa", flag_short = Some('e'), flag_desc = "A", flag_hidden = false, opt_long = "oa", opt_short = Some('e'), opt_ph = "a", opt_desc = "a", opt_hidden = false

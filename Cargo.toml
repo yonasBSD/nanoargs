@@ -1,0 +1,19 @@
+[package]
+name = "nanoargs"
+edition = "2021"
+license = "MIT"
+version = "0.1.0"
+authors = ["Anthony Sgro"]
+description = "A minimal, zero-dependency argument parser for Rust CLI applications"
+repository = "https://github.com/anthonysgro/nanoargs"
+readme = "README.md"
+exclude = ["tests/*.proptest-regressions"]
+
+[features]
+color = ["dep:nanocolor"]
+
+[dependencies]
+nanocolor = { version = "0.1", optional = true }
+
+[dev-dependencies]
+proptest = "1"
