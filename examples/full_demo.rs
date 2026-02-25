@@ -9,7 +9,7 @@
 //!   cargo run --example full_demo --features color -- --file x --port 0
 //!   cargo run --example full_demo --features color -- --version
 
-use nanoargs::{extract, range, one_of, ArgBuilder, Flag, Opt, ParseError};
+use nanoargs::{extract, one_of, range, ArgBuilder, Flag, Opt, ParseError};
 
 fn main() {
     let parser = ArgBuilder::new()
@@ -26,12 +26,20 @@ fn main() {
         // Other options
         .flag(Flag::new("verbose").desc("Enable verbose output").short('v'))
         .option(
-            Opt::new("port").placeholder("NUM").desc("Server port")
-                .short('p').default("8080").validate(range(1, 65535)),
+            Opt::new("port")
+                .placeholder("NUM")
+                .desc("Server port")
+                .short('p')
+                .default("8080")
+                .validate(range(1, 65535)),
         )
         .option(
-            Opt::new("level").placeholder("LEVEL").desc("Log level")
-                .short('l').default("info").validate(one_of(&["debug", "info", "warn", "error"])),
+            Opt::new("level")
+                .placeholder("LEVEL")
+                .desc("Log level")
+                .short('l')
+                .default("info")
+                .validate(one_of(&["debug", "info", "warn", "error"])),
         )
         // Groups and conflicts
         .group("input source", &["stdin", "file"])
@@ -53,10 +61,24 @@ fn main() {
             })
             .unwrap();
 
-            let source = if opts.stdin { "stdin".into() } else { format!("{}", opts.file.unwrap()) };
-            let format = if opts.json { "JSON" } else if opts.csv { "CSV" } else if opts.yaml { "YAML" } else { "text" };
+            let source = if opts.stdin {
+                "stdin".into()
+            } else {
+                format!("{}", opts.file.unwrap())
+            };
+            let format = if opts.json {
+                "JSON"
+            } else if opts.csv {
+                "CSV"
+            } else if opts.yaml {
+                "YAML"
+            } else {
+                "text"
+            };
 
-            if opts.verbose { println!("[verbose mode]"); }
+            if opts.verbose {
+                println!("[verbose mode]");
+            }
             println!("source: {source}");
             println!("format: {format}");
             println!("port:   {}", opts.port);
