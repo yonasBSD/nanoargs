@@ -2,7 +2,7 @@
 name = "nanoargs"
 edition = "2021"
 license = "MIT"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Anthony Sgro"]
 description = "A minimal, zero-dependency argument parser for Rust CLI applications"
 keywords = ["cli", "args", "parser", "arguments", "command-line"]

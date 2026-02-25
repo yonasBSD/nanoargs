@@ -441,7 +441,17 @@ impl ArgParser {
 
     /// Parse arguments from `std::env::args()`, skipping the program name.
     pub fn parse_env(&self) -> Result<ParseResult, ParseError> {
-        let args: Vec<String> = std::env::args().skip(1).collect();
+        let mut args = Vec::new();
+        for os_arg in std::env::args_os().skip(1) {
+            match os_arg.into_string() {
+                Ok(s) => args.push(s),
+                Err(bad) => {
+                    return Err(ParseError::InvalidUtf8(
+                        bad.to_string_lossy().into_owned(),
+                    ))
+                }
+            }
+        }
         self.parse(args)
     }
 }

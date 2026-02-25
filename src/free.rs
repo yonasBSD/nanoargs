@@ -32,7 +32,17 @@ use crate::types::ParseError;
 /// of your options could plausibly receive a value that starts with `-`, use
 /// [`ArgBuilder`](crate::ArgBuilder) instead.
 pub fn parse_loose() -> Result<ParseResult, ParseError> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args = Vec::new();
+    for os_arg in std::env::args_os().skip(1) {
+        match os_arg.into_string() {
+            Ok(s) => args.push(s),
+            Err(bad) => {
+                return Err(ParseError::InvalidUtf8(
+                    bad.to_string_lossy().into_owned(),
+                ))
+            }
+        }
+    }
     parse_loose_from(args)
 }
 

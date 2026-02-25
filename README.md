@@ -358,6 +358,7 @@ match parser.parse(args) {
     Err(ParseError::UnknownSubcommand(name)) => eprintln!("unknown subcommand: {}", name),
     Err(ParseError::DuplicateOption(name)) => eprintln!("duplicate: --{}", name),
     Err(ParseError::InvalidFormat(msg)) => eprintln!("bad format: {}", msg),
+    Err(ParseError::InvalidUtf8(lossy)) => eprintln!("invalid UTF-8: {}", lossy),
 }
 ```
 
