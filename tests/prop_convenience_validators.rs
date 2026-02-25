@@ -28,10 +28,11 @@ proptest! {
     fn prop_min_length_correctness(n in 0usize..64, value in ".{0,80}") {
         let v = min_length(n);
         let result = v.validate(&value);
-        if value.len() >= n {
-            prop_assert!(result.is_ok(), "Expected Ok for len {} >= {}", value.len(), n);
+        let char_count = value.chars().count();
+        if char_count >= n {
+            prop_assert!(result.is_ok(), "Expected Ok for char_count {} >= {}", char_count, n);
         } else {
-            prop_assert!(result.is_err(), "Expected Err for len {} < {}", value.len(), n);
+            prop_assert!(result.is_err(), "Expected Err for char_count {} < {}", char_count, n);
         }
     }
 }
@@ -43,10 +44,11 @@ proptest! {
     fn prop_max_length_correctness(n in 0usize..64, value in ".{0,80}") {
         let v = max_length(n);
         let result = v.validate(&value);
-        if value.len() <= n {
-            prop_assert!(result.is_ok(), "Expected Ok for len {} <= {}", value.len(), n);
+        let char_count = value.chars().count();
+        if char_count <= n {
+            prop_assert!(result.is_ok(), "Expected Ok for char_count {} <= {}", char_count, n);
         } else {
-            prop_assert!(result.is_err(), "Expected Err for len {} > {}", value.len(), n);
+            prop_assert!(result.is_err(), "Expected Err for char_count {} > {}", char_count, n);
         }
     }
 }

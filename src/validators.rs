@@ -89,10 +89,11 @@ pub fn non_empty() -> Validator {
     })
 }
 
-/// Returns a Validator that rejects strings shorter than `n` bytes.
+/// Returns a Validator that rejects strings shorter than `n` characters
+/// (Unicode scalar values, i.e. `str::chars().count()`).
 pub fn min_length(n: usize) -> Validator {
     Validator::with_hint(&format!("[min_length: {}]", n), move |v| {
-        if v.len() >= n {
+        if v.chars().count() >= n {
             Ok(())
         } else {
             Err(format!("value must be at least {} characters", n))
@@ -100,10 +101,11 @@ pub fn min_length(n: usize) -> Validator {
     })
 }
 
-/// Returns a Validator that rejects strings longer than `n` bytes.
+/// Returns a Validator that rejects strings longer than `n` characters
+/// (Unicode scalar values, i.e. `str::chars().count()`).
 pub fn max_length(n: usize) -> Validator {
     Validator::with_hint(&format!("[max_length: {}]", n), move |v| {
-        if v.len() <= n {
+        if v.chars().count() <= n {
             Ok(())
         } else {
             Err(format!("value must be at most {} characters", n))
