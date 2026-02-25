@@ -69,6 +69,24 @@ pub struct SubcommandDef {
     pub parser: ArgParser,
 }
 
+/// Definition of an argument group: at least one member must be provided.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupDef {
+    /// Human-readable name for the group (used in error messages and help text).
+    pub name: String,
+    /// Long names of the member arguments (flags or options).
+    pub members: Vec<String>,
+}
+
+/// Definition of a conflict set: at most one member may be provided.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConflictDef {
+    /// Human-readable name for the conflict set (used in error messages and help text).
+    pub name: String,
+    /// Long names of the mutually exclusive arguments (flags or options).
+    pub members: Vec<String>,
+}
+
 /// Errors produced during argument parsing.
 ///
 /// The `HelpRequested` and `VersionRequested` variants carry the formatted
@@ -106,6 +124,20 @@ pub enum ParseError {
         name: String,
         /// The human-readable validation error message.
         message: String,
+    },
+    /// An argument group constraint was violated: none of the members were provided.
+    GroupViolation {
+        /// The group name.
+        group: String,
+        /// Long names of the group's member arguments.
+        members: Vec<String>,
+    },
+    /// A conflict set constraint was violated: two or more mutually exclusive members were provided.
+    ConflictViolation {
+        /// The conflict set name.
+        conflict: String,
+        /// Long names of the conflicting arguments that were provided.
+        provided: Vec<String>,
     },
 }
 
@@ -188,6 +220,28 @@ impl fmt::Display for ParseError {
                     "{}validation failed for {}: {message}",
                     error_prefix(),
                     yellow_arg(name)
+                )
+            }
+            ParseError::GroupViolation { group, members } => {
+                let member_list: Vec<String> = members.iter().map(|m| yellow_arg(&format!("--{m}"))).collect();
+                write!(
+                    f,
+                    "{}at least one of the following is required (group '{group}'): {}",
+                    error_prefix(),
+                    member_list.join(", ")
+                )
+            }
+            ParseError::ConflictViolation { conflict, provided } => {
+                let arg_list: Vec<String> = provided.iter().map(|m| yellow_arg(&format!("--{m}"))).collect();
+                let joined = if arg_list.len() == 2 {
+                    format!("{} and {}", arg_list[0], arg_list[1])
+                } else {
+                    arg_list.join(", ")
+                };
+                write!(
+                    f,
+                    "{}conflicting arguments ('{conflict}'): {joined} cannot be used together",
+                    error_prefix(),
                 )
             }
         }

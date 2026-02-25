@@ -181,7 +181,7 @@ pub use completions::Shell;
 pub use free::parse_loose;
 pub use parser::ArgParser;
 pub use result::{OptionError, ParseResult, ParseResultBuilder};
-pub use types::{FlagDef, OptionDef, ParseError, PositionalDef, SubcommandDef};
+pub use types::{ConflictDef, FlagDef, GroupDef, OptionDef, ParseError, PositionalDef, SubcommandDef};
 pub use validators::{max_length, min_length, non_empty, one_of, path_exists, range, Validator};
 
 #[cfg(test)]

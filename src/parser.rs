@@ -27,6 +27,8 @@ pub struct ArgParser {
     pub(crate) options: Vec<OptionDef>,
     pub(crate) positionals: Vec<PositionalDef>,
     pub(crate) subcommands: Vec<SubcommandDef>,
+    pub(crate) groups: Vec<GroupDef>,
+    pub(crate) conflicts: Vec<ConflictDef>,
 }
 
 impl ArgParser {
@@ -58,6 +60,16 @@ impl ArgParser {
     /// Returns the registered subcommand definitions.
     pub fn subcommands(&self) -> &[SubcommandDef] {
         &self.subcommands
+    }
+
+    /// Returns the registered argument group definitions.
+    pub fn groups(&self) -> &[GroupDef] {
+        &self.groups
+    }
+
+    /// Returns the registered conflict set definitions.
+    pub fn conflicts(&self) -> &[ConflictDef] {
+        &self.conflicts
     }
 
     /// Returns formatted version text, or None if no version is configured.
@@ -404,6 +416,53 @@ impl ArgParser {
         Ok(())
     }
 
+    /// Check argument group and conflict constraints after parsing.
+    ///
+    /// Groups require at least one member to be provided.
+    /// Conflicts require at most one member to be provided.
+    /// A flag is "provided" when its value is `true`.
+    /// An option is "provided" when it has a non-empty value list.
+    fn check_group_and_conflict_constraints(
+        &self,
+        flag_values: &HashMap<String, bool>,
+        option_values: &HashMap<String, Vec<String>>,
+    ) -> Result<(), ParseError> {
+        for group in &self.groups {
+            let any_provided = group.members.iter().any(|name| {
+                if let Some(&v) = flag_values.get(name.as_str()) {
+                    return v;
+                }
+                option_values.get(name.as_str()).is_some_and(|v| !v.is_empty())
+            });
+            if !any_provided {
+                return Err(ParseError::GroupViolation {
+                    group: group.name.clone(),
+                    members: group.members.clone(),
+                });
+            }
+        }
+        for conflict in &self.conflicts {
+            let provided: Vec<String> = conflict
+                .members
+                .iter()
+                .filter(|name| {
+                    if let Some(&v) = flag_values.get(name.as_str()) {
+                        return v;
+                    }
+                    option_values.get(name.as_str()).is_some_and(|v| !v.is_empty())
+                })
+                .cloned()
+                .collect();
+            if provided.len() >= 2 {
+                return Err(ParseError::ConflictViolation {
+                    conflict: conflict.name.clone(),
+                    provided,
+                });
+            }
+        }
+        Ok(())
+    }
+
     /// Original parse logic for parsers without subcommands.
     fn parse_no_subcommands(&self, args: Vec<String>) -> Result<ParseResult, ParseError> {
         let mut flag_values: HashMap<String, bool> = HashMap::new();
@@ -459,6 +518,9 @@ impl ArgParser {
             }
         }
 
+        // Check group and conflict constraints
+        self.check_group_and_conflict_constraints(&flag_values, &option_values)?;
+
         Ok(ParseResult::new(
             flag_values,
             option_values,
@@ -486,6 +548,9 @@ impl ArgParser {
                     let sub_result = subcmd.parser.parse(remaining)?;
 
                     Self::apply_option_fallbacks(&self.options, &mut global_options)?;
+
+                    // Check group and conflict constraints on global args
+                    self.check_group_and_conflict_constraints(&global_flags, &global_options)?;
 
                     Ok(ParseResult::new(
                         global_flags,

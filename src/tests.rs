@@ -589,3 +589,215 @@ fn debug_assert_builder_result_known_name_ok() {
     assert!(result.get_flag("verbose"));
     assert_eq!(result.get_option("output"), Some("file.txt"));
 }
+
+// ── Subcommand-level group and conflict tests ──────────────────────────────
+
+#[test]
+fn subcommand_group_violation_on_subcommand_args() {
+    // Subcommand parser has a group; none of its members provided → GroupViolation
+    let sub_parser = ArgBuilder::new()
+        .flag(Flag::new("json").desc("JSON output"))
+        .flag(Flag::new("csv").desc("CSV output"))
+        .group("output format", &["json", "csv"])
+        .build()
+        .unwrap();
+
+    let parent = ArgBuilder::new().subcommand("export", "export data", sub_parser).build().unwrap();
+
+    let result = parent.parse(vec!["export".into()]);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    match err {
+        ParseError::GroupViolation { group, members } => {
+            assert_eq!(group, "output format");
+            assert_eq!(members, vec!["json", "csv"]);
+        }
+        other => panic!("Expected GroupViolation, got: {:?}", other),
+    }
+}
+
+#[test]
+fn subcommand_group_satisfied_on_subcommand_args() {
+    // Subcommand parser has a group; one member provided → success
+    let sub_parser = ArgBuilder::new()
+        .flag(Flag::new("json").desc("JSON output"))
+        .flag(Flag::new("csv").desc("CSV output"))
+        .group("output format", &["json", "csv"])
+        .build()
+        .unwrap();
+
+    let parent = ArgBuilder::new().subcommand("export", "export data", sub_parser).build().unwrap();
+
+    let result = parent.parse(vec!["export".into(), "--json".into()]).unwrap();
+    let sub = result.subcommand_result().unwrap();
+    assert!(sub.get_flag("json"));
+    assert!(!sub.get_flag("csv"));
+}
+
+#[test]
+fn subcommand_conflict_violation_on_subcommand_args() {
+    // Subcommand parser has a conflict; two members provided → ConflictViolation
+    let sub_parser = ArgBuilder::new()
+        .flag(Flag::new("json").desc("JSON output"))
+        .flag(Flag::new("csv").desc("CSV output"))
+        .conflict("output format", &["json", "csv"])
+        .build()
+        .unwrap();
+
+    let parent = ArgBuilder::new().subcommand("export", "export data", sub_parser).build().unwrap();
+
+    let result = parent.parse(vec!["export".into(), "--json".into(), "--csv".into()]);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ParseError::ConflictViolation { conflict, provided } => {
+            assert_eq!(conflict, "output format");
+            assert_eq!(provided, vec!["json", "csv"]);
+        }
+        other => panic!("Expected ConflictViolation, got: {:?}", other),
+    }
+}
+
+#[test]
+fn subcommand_conflict_ok_with_one_member() {
+    // Subcommand parser has a conflict; only one member provided → success
+    let sub_parser = ArgBuilder::new()
+        .flag(Flag::new("json").desc("JSON output"))
+        .flag(Flag::new("csv").desc("CSV output"))
+        .conflict("output format", &["json", "csv"])
+        .build()
+        .unwrap();
+
+    let parent = ArgBuilder::new().subcommand("export", "export data", sub_parser).build().unwrap();
+
+    let result = parent.parse(vec!["export".into(), "--csv".into()]).unwrap();
+    let sub = result.subcommand_result().unwrap();
+    assert!(sub.get_flag("csv"));
+    assert!(!sub.get_flag("json"));
+}
+
+#[test]
+fn parent_group_validated_against_global_args_not_subcommand_args() {
+    // Parent has a group on global flags; subcommand has its own flags.
+    // Providing the global group member satisfies the parent group,
+    // even though the subcommand doesn't know about it.
+    let sub_parser = ArgBuilder::new().flag(Flag::new("detail").desc("show details")).build().unwrap();
+
+    let parent = ArgBuilder::new()
+        .flag(Flag::new("verbose").desc("verbose"))
+        .flag(Flag::new("quiet").desc("quiet"))
+        .group("verbosity", &["verbose", "quiet"])
+        .subcommand("run", "run something", sub_parser)
+        .build()
+        .unwrap();
+
+    // Provide global group member before subcommand → success
+    let result = parent.parse(vec!["--verbose".into(), "run".into()]).unwrap();
+    assert!(result.get_flag("verbose"));
+    assert_eq!(result.subcommand(), Some("run"));
+}
+
+#[test]
+fn parent_group_violation_when_no_global_member_provided() {
+    // Parent has a group on global flags; no global member provided → GroupViolation
+    let sub_parser = ArgBuilder::new().flag(Flag::new("detail").desc("show details")).build().unwrap();
+
+    let parent = ArgBuilder::new()
+        .flag(Flag::new("verbose").desc("verbose"))
+        .flag(Flag::new("quiet").desc("quiet"))
+        .group("verbosity", &["verbose", "quiet"])
+        .subcommand("run", "run something", sub_parser)
+        .build()
+        .unwrap();
+
+    let result = parent.parse(vec!["run".into()]);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ParseError::GroupViolation { group, .. } => assert_eq!(group, "verbosity"),
+        other => panic!("Expected GroupViolation, got: {:?}", other),
+    }
+}
+
+#[test]
+fn parent_conflict_validated_against_global_args() {
+    // Parent has a conflict on global flags; both provided → ConflictViolation
+    let sub_parser = ArgBuilder::new().build().unwrap();
+
+    let parent = ArgBuilder::new()
+        .flag(Flag::new("verbose").desc("verbose"))
+        .flag(Flag::new("quiet").desc("quiet"))
+        .conflict("verbosity", &["verbose", "quiet"])
+        .subcommand("run", "run something", sub_parser)
+        .build()
+        .unwrap();
+
+    let result = parent.parse(vec!["--verbose".into(), "--quiet".into(), "run".into()]);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ParseError::ConflictViolation { conflict, .. } => assert_eq!(conflict, "verbosity"),
+        other => panic!("Expected ConflictViolation, got: {:?}", other),
+    }
+}
+
+#[test]
+fn independent_groups_on_parent_and_subcommand() {
+    // Parent and subcommand each have their own group.
+    // Parent group is checked against global args; subcommand group against subcommand args.
+    let sub_parser = ArgBuilder::new()
+        .flag(Flag::new("json").desc("JSON"))
+        .flag(Flag::new("csv").desc("CSV"))
+        .group("format", &["json", "csv"])
+        .build()
+        .unwrap();
+
+    let parent = ArgBuilder::new()
+        .flag(Flag::new("verbose").desc("verbose"))
+        .flag(Flag::new("quiet").desc("quiet"))
+        .group("verbosity", &["verbose", "quiet"])
+        .subcommand("export", "export data", sub_parser)
+        .build()
+        .unwrap();
+
+    // Both groups satisfied
+    let result = parent.parse(vec!["--verbose".into(), "export".into(), "--json".into()]).unwrap();
+    assert!(result.get_flag("verbose"));
+    let sub = result.subcommand_result().unwrap();
+    assert!(sub.get_flag("json"));
+}
+
+#[test]
+fn independent_conflicts_on_parent_and_subcommand() {
+    // Parent and subcommand each have their own conflict set.
+    let sub_parser = ArgBuilder::new()
+        .flag(Flag::new("json").desc("JSON"))
+        .flag(Flag::new("csv").desc("CSV"))
+        .conflict("format", &["json", "csv"])
+        .build()
+        .unwrap();
+
+    let parent = ArgBuilder::new()
+        .flag(Flag::new("verbose").desc("verbose"))
+        .flag(Flag::new("quiet").desc("quiet"))
+        .conflict("verbosity", &["verbose", "quiet"])
+        .subcommand("export", "export data", sub_parser)
+        .build()
+        .unwrap();
+
+    // Parent conflict OK (one member), subcommand conflict OK (one member)
+    let result = parent.parse(vec!["--verbose".into(), "export".into(), "--csv".into()]).unwrap();
+    assert!(result.get_flag("verbose"));
+    let sub = result.subcommand_result().unwrap();
+    assert!(sub.get_flag("csv"));
+
+    // Subcommand conflict violated (both members)
+    let result2 = parent.parse(vec![
+        "--verbose".into(),
+        "export".into(),
+        "--json".into(),
+        "--csv".into(),
+    ]);
+    assert!(result2.is_err());
+    match result2.unwrap_err() {
+        ParseError::ConflictViolation { conflict, .. } => assert_eq!(conflict, "format"),
+        other => panic!("Expected ConflictViolation on subcommand, got: {:?}", other),
+    }
+}

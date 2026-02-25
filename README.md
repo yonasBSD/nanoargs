@@ -12,7 +12,7 @@ A lightweight, zero-dependency argument parser for Rust.
   <img src="demo.gif" alt="nanoargs help output" width="700" />
 </p>
 
-Part of the [nano](https://github.com/anthonysgro/nano) crate family — minimal, zero-dependency building blocks for Rust.
+Part of the [nano](https://github.com/anthonysgro/nano) crate family — zero-dependency building blocks for Rust.
 
 Everything you'd expect from a CLI parser — flags, options, subcommands, help generation, env fallback, typed parsing — with zero dependencies.
 
@@ -40,6 +40,7 @@ Choosing a CLI parser in Rust usually feels like a compromise:
 | Colored help | ✓§ | ✓ | ✓§ | ✗ | ✗ |
 | Derive macros | ✗ | ✓ | ✓ | ✗ | ✗ |
 | Value validation | ✓ | ✓ | ✓ | ✗ | ✗ |
+| Argument groups & conflicts | ✓ | ✓ | ✓ | ✗ | ✗ |
 | Shell completions | ✓ | ✓ | ✓§ | ✗ | ✗ |
 | Other advanced features | ✗ | ✓ | ✓ | ✗ | ✗ |
 
@@ -374,6 +375,42 @@ Validator::with_hint("non-empty", |v| {
 })
 ```
 
+### Argument Groups and Conflicts ([example](examples/groups_and_conflicts.rs))
+
+Declare relationships between arguments: groups require at least one member ("pick at least one"), and conflicts enforce mutual exclusivity ("pick at most one").
+
+```rust
+use nanoargs::{ArgBuilder, Flag, Opt};
+
+let parser = ArgBuilder::new()
+    .flag(Flag::new("stdin").desc("Read from standard input"))
+    .option(Opt::new("file").placeholder("PATH").desc("Read from a file").short('f'))
+    .flag(Flag::new("json").desc("Output as JSON"))
+    .flag(Flag::new("csv").desc("Output as CSV"))
+    .flag(Flag::new("yaml").desc("Output as YAML"))
+    .group("input source", &["stdin", "file"])
+    .conflict("output format", &["json", "csv", "yaml"])
+    .build()
+    .unwrap();
+```
+
+```sh
+myapp --file data.csv --json     # OK — one input source, one output format
+myapp --stdin --yaml             # OK
+myapp --json --csv               # error: conflicting arguments ('output format')
+myapp                            # error: at least one required (group 'input source')
+```
+
+Groups and conflicts are validated after all parsing and fallback resolution. An option with a default or env var counts as "provided" for both group satisfaction and conflict detection. Help text shows the relationships automatically:
+
+```
+Argument Groups:
+  input source  --stdin, --file (at least one required)
+
+Conflicts:
+  output format  --json, --csv, --yaml (mutually exclusive)
+```
+
 ### Shell Completions ([example](examples/completions.rs))
 
 Generate tab-completion scripts for Bash, Zsh, Fish, and PowerShell directly from your parser schema. The scripts include all non-hidden flags, options, and subcommands with descriptions.
@@ -411,6 +448,56 @@ myapp completions powershell >> $PROFILE
 ```
 
 ## Parsing and Results
+
+### Extracting Results ([example](examples/extract.rs))
+
+The `extract!` macro is the recommended way to pull typed values out of a `ParseResult`. It replaces scattered `get_flag` / `get_option_required` / `get_option_or_default` calls with a single declaration:
+
+```rust
+let opts = nanoargs::extract!(result, {
+    verbose: bool,                   // flag
+    output: String,                  // required option (parsed via FromStr)
+    jobs: u32 = 4,                   // option with default
+    format: Option<String>,          // optional — None if absent
+    tag: Vec<String>,                // multi-value option
+}).unwrap();
+
+println!("{} {} {:?}", opts.output, opts.jobs, opts.tag);
+```
+
+Field names are automatically mapped to CLI option names by converting underscores to hyphens (`listen_port` → `"listen-port"`). Override with `as "name"` when needed:
+
+```rust
+let opts = nanoargs::extract!(result, {
+    port: u16 as "listen-port",              // custom name, required
+    workers: u32 as "num-workers" = 4,       // custom name with default
+}).unwrap();
+```
+
+Positional arguments can be extracted with `as @pos` — no more manual indexing into `get_positionals()`:
+
+```rust
+let opts = nanoargs::extract!(result, {
+    verbose: bool,
+    output: String,
+    input: String as @pos,                   // required positional (index 0)
+    extra: Option<String> as @pos,           // optional positional (index 1, None if absent)
+    files: Vec<String> as @pos,              // all remaining positionals from index 2 onward
+}).unwrap();
+```
+
+Positional indices are assigned sequentially among `@pos` fields (non-`@pos` fields don't consume indices). The full set of positional variants:
+
+| Syntax | Behavior |
+|--------|----------|
+| `name: T as @pos` | Required — error if absent |
+| `name: Option<T> as @pos` | Optional — `None` if absent |
+| `name: T as @pos = expr` | Default — falls back to `expr` if absent (macro-level only, not visible in `--help`) |
+| `name: Vec<T> as @pos` | Remaining — collects all from current index onward |
+
+Declare them in order: required → optional/default → `Vec` (remaining). `Vec<T> as @pos` must be last since it consumes all remaining positionals.
+
+The macro returns `Result<Struct, OptionError>`, so use `.unwrap()` or `?` as appropriate. The `ParseResult` is borrowed, so you can still call accessors afterward.
 
 ### Accessors
 
@@ -470,56 +557,6 @@ match result.get_option_parsed::<u32>("jobs") {
 }
 ```
 
-### Extracting Results ([example](examples/extract.rs))
-
-The `extract!` macro is the recommended way to pull typed values out of a `ParseResult`. It replaces scattered `get_flag` / `get_option_required` / `get_option_or_default` calls with a single declaration:
-
-```rust
-let opts = nanoargs::extract!(result, {
-    verbose: bool,                   // flag
-    output: String,                  // required option (parsed via FromStr)
-    jobs: u32 = 4,                   // option with default
-    format: Option<String>,          // optional — None if absent
-    tag: Vec<String>,                // multi-value option
-}).unwrap();
-
-println!("{} {} {:?}", opts.output, opts.jobs, opts.tag);
-```
-
-Field names are automatically mapped to CLI option names by converting underscores to hyphens (`listen_port` → `"listen-port"`). Override with `as "name"` when needed:
-
-```rust
-let opts = nanoargs::extract!(result, {
-    port: u16 as "listen-port",              // custom name, required
-    workers: u32 as "num-workers" = 4,       // custom name with default
-}).unwrap();
-```
-
-Positional arguments can be extracted with `as @pos` — no more manual indexing into `get_positionals()`:
-
-```rust
-let opts = nanoargs::extract!(result, {
-    verbose: bool,
-    output: String,
-    input: String as @pos,                   // required positional (index 0)
-    extra: Option<String> as @pos,           // optional positional (index 1, None if absent)
-    files: Vec<String> as @pos,              // all remaining positionals from index 2 onward
-}).unwrap();
-```
-
-Positional indices are assigned sequentially among `@pos` fields (non-`@pos` fields don't consume indices). The full set of positional variants:
-
-| Syntax | Behavior |
-|--------|----------|
-| `name: T as @pos` | Required — error if absent |
-| `name: Option<T> as @pos` | Optional — `None` if absent |
-| `name: T as @pos = expr` | Default — falls back to `expr` if absent (macro-level only, not visible in `--help`) |
-| `name: Vec<T> as @pos` | Remaining — collects all from current index onward |
-
-Declare them in order: required → optional/default → `Vec` (remaining). `Vec<T> as @pos` must be last since it consumes all remaining positionals.
-
-The macro returns `Result<Struct, OptionError>`, so use `.unwrap()` or `?` as appropriate. The `ParseResult` is borrowed, so you can still call accessors afterward.
-
 ### Error Handling ([example](examples/error_handling.rs))
 
 ```rust
@@ -536,6 +573,8 @@ match parser.parse(args) {
     Err(ParseError::InvalidFormat(msg)) => eprintln!("bad format: {}", msg),
     Err(ParseError::ValidationFailed { name, message }) => eprintln!("validation failed for {name}: {message}"),
     Err(ParseError::InvalidUtf8(lossy)) => eprintln!("invalid UTF-8: {}", lossy),
+    Err(ParseError::GroupViolation { group, members }) => eprintln!("group '{group}' requires one of: {}", members.iter().map(|m| format!("--{m}")).collect::<Vec<_>>().join(", ")),
+    Err(ParseError::ConflictViolation { conflict, provided }) => eprintln!("conflict '{conflict}': {} cannot be used together", provided.iter().map(|m| format!("--{m}")).collect::<Vec<_>>().join(", ")),
 }
 ```
 
@@ -620,6 +659,7 @@ See the [full API docs on docs.rs](https://docs.rs/nanoargs/latest/nanoargs/).
 | [error_handling](examples/error_handling.rs) | `ParseError` variant handling | `cargo run --example error_handling` |
 | [help_text](examples/help_text.rs) | Auto-generated help text | `cargo run --example help_text -- --help` |
 | [value_validation](examples/value_validation.rs) | Declarative value validation | `cargo run --example value_validation -- --port 8080 --level info /tmp/out` |
+| [groups_and_conflicts](examples/groups_and_conflicts.rs) | Argument groups and mutual exclusivity | `cargo run --example groups_and_conflicts -- --file data.csv --json` |
 | [completions](examples/completions.rs) | Shell completion script generation | `cargo run --example completions -- zsh` |
 
 ## Contributing

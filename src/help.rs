@@ -220,6 +220,38 @@ impl ArgParser {
             out.push_str(&format_section("Options:", &entries));
         }
 
+        // Argument Groups
+        if !self.groups.is_empty() {
+            let entries: Vec<HelpEntry> = self
+                .groups
+                .iter()
+                .map(|g| {
+                    let members_str = g.members.iter().map(|m| green(&format!("--{m}"))).collect::<Vec<_>>().join(", ");
+                    HelpEntry {
+                        label: g.name.clone(),
+                        description: format!("{} {}", members_str, dim("(at least one required)")),
+                    }
+                })
+                .collect();
+            out.push_str(&format_section("Argument Groups:", &entries));
+        }
+
+        // Conflicts
+        if !self.conflicts.is_empty() {
+            let entries: Vec<HelpEntry> = self
+                .conflicts
+                .iter()
+                .map(|c| {
+                    let members_str = c.members.iter().map(|m| green(&format!("--{m}"))).collect::<Vec<_>>().join(", ");
+                    HelpEntry {
+                        label: c.name.clone(),
+                        description: format!("{} {}", members_str, dim("(mutually exclusive)")),
+                    }
+                })
+                .collect();
+            out.push_str(&format_section("Conflicts:", &entries));
+        }
+
         // Positionals (omitted when subcommands are present)
         if !has_subcommands {
             let entries: Vec<HelpEntry> = self

@@ -255,6 +255,8 @@ pub struct ArgBuilder {
     options: Vec<OptionDef>,
     positionals: Vec<PositionalDef>,
     subcommands: Vec<SubcommandDef>,
+    groups: Vec<(String, Vec<String>)>,
+    conflicts: Vec<(String, Vec<String>)>,
 }
 
 impl ArgBuilder {
@@ -268,6 +270,8 @@ impl ArgBuilder {
             options: Vec::new(),
             positionals: Vec::new(),
             subcommands: Vec::new(),
+            groups: Vec::new(),
+            conflicts: Vec::new(),
         }
     }
 
@@ -319,6 +323,18 @@ impl ArgBuilder {
                 parser,
             });
         }
+        self
+    }
+
+    /// Declare an argument group: at least one of the named arguments must be provided.
+    pub fn group(mut self, name: &str, members: &[&str]) -> Self {
+        self.groups.push((name.to_string(), members.iter().map(|m| m.to_string()).collect()));
+        self
+    }
+
+    /// Declare a conflict set: at most one of the named arguments may be provided.
+    pub fn conflict(mut self, name: &str, members: &[&str]) -> Self {
+        self.conflicts.push((name.to_string(), members.iter().map(|m| m.to_string()).collect()));
         self
     }
 
@@ -410,6 +426,51 @@ impl ArgBuilder {
             )));
         }
 
+        // Validate groups and conflicts
+        let mut validated_groups = Vec::new();
+        for (name, members) in &self.groups {
+            if members.len() < 2 {
+                return Err(ParseError::InvalidFormat(format!(
+                    "group '{}' requires at least two members",
+                    name
+                )));
+            }
+            for member in members {
+                if !self.flags.iter().any(|f| f.long == *member) && !self.options.iter().any(|o| o.long == *member) {
+                    return Err(ParseError::InvalidFormat(format!(
+                        "group '{}' references unknown argument: --{}",
+                        name, member
+                    )));
+                }
+            }
+            validated_groups.push(GroupDef {
+                name: name.clone(),
+                members: members.clone(),
+            });
+        }
+
+        let mut validated_conflicts = Vec::new();
+        for (name, members) in &self.conflicts {
+            if members.len() < 2 {
+                return Err(ParseError::InvalidFormat(format!(
+                    "conflict '{}' requires at least two members",
+                    name
+                )));
+            }
+            for member in members {
+                if !self.flags.iter().any(|f| f.long == *member) && !self.options.iter().any(|o| o.long == *member) {
+                    return Err(ParseError::InvalidFormat(format!(
+                        "conflict '{}' references unknown argument: --{}",
+                        name, member
+                    )));
+                }
+            }
+            validated_conflicts.push(ConflictDef {
+                name: name.clone(),
+                members: members.clone(),
+            });
+        }
+
         Ok(ArgParser {
             program_name: self.program_name,
             program_desc: self.program_desc,
@@ -418,6 +479,8 @@ impl ArgBuilder {
             options: self.options,
             positionals: self.positionals,
             subcommands: self.subcommands,
+            groups: validated_groups,
+            conflicts: validated_conflicts,
         })
     }
 }
