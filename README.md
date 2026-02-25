@@ -39,7 +39,7 @@ Choosing a CLI parser in Rust usually feels like a compromise:
 | Hidden args | ✓ | ✓ | ✓ | — | — |
 | Colored help | ✓§ | ✓ | ✓§ | ✗ | ✗ |
 | Derive macros | ✗ | ✓ | ✓ | ✗ | ✗ |
-| Shell completions | ✗ | ✓ | ✓§ | ✗ | ✗ |
+| Shell completions | ✓ | ✓ | ✓§ | ✗ | ✗ |
 | Other advanced features | ✗ | ✓ | ✓ | ✗ | ✗ |
 
 \* `clap` with default features. With derive, ~17 total.
@@ -323,6 +323,42 @@ The `-V` short flag is reserved when a version is configured — the builder wil
 
 When both `--help` and `--version` appear, whichever comes first wins. After `--`, both are treated as positionals.
 
+### Shell Completions ([example](examples/completions.rs))
+
+Generate tab-completion scripts for Bash, Zsh, Fish, and PowerShell directly from your parser schema. The scripts include all non-hidden flags, options, and subcommands with descriptions.
+
+```rust
+use nanoargs::{ArgBuilder, Flag, Opt, Shell};
+
+let parser = ArgBuilder::new()
+    .name("myapp")
+    .flag(Flag::new("verbose").short('v').desc("Enable verbose output"))
+    .option(Opt::new("output").short('o').placeholder("FILE").desc("Output file"))
+    .build()
+    .unwrap();
+
+let shell: Shell = "zsh".parse().unwrap();
+print!("{}", parser.generate_completions(shell));
+```
+
+Install completions for each shell:
+
+```sh
+# Bash
+myapp completions bash > /etc/bash_completion.d/myapp
+# or source it directly:
+source <(myapp completions bash)
+
+# Zsh — place in your fpath
+myapp completions zsh > "${fpath[1]}/_myapp"
+
+# Fish
+myapp completions fish > ~/.config/fish/completions/myapp.fish
+
+# PowerShell — add to your $PROFILE
+myapp completions powershell >> $PROFILE
+```
+
 ## Parsing and Results
 
 ### Accessors
@@ -531,6 +567,7 @@ See the [full API docs on docs.rs](https://docs.rs/nanoargs/latest/nanoargs/).
 | [env_fallback](examples/env_fallback.rs) | Environment variable fallback | `cargo run --example env_fallback -- --output out.txt` |
 | [error_handling](examples/error_handling.rs) | `ParseError` variant handling | `cargo run --example error_handling` |
 | [help_text](examples/help_text.rs) | Auto-generated help text | `cargo run --example help_text -- --help` |
+| [completions](examples/completions.rs) | Shell completion script generation | `cargo run --example completions -- zsh` |
 
 ## Contributing
 

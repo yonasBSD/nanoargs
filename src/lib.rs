@@ -47,6 +47,7 @@
 //! | Auto help | Built-in `-h` / `--help` with column-aligned output |
 //! | Version flag | `.version("1.0.0")` enables `--version` / `-V` |
 //! | Colored output | Opt-in `color` feature for ANSI-styled help and errors via [`nanocolor`](https://crates.io/crates/nanocolor) |
+//! | Shell completions | Generate completion scripts for Bash, Zsh, Fish, and PowerShell via [`ArgParser::generate_completions`] |
 //!
 //! ## Builder API
 //!
@@ -166,6 +167,7 @@
 //! [`ArgBuilder`].
 
 mod builders;
+mod completions;
 mod free;
 mod help;
 mod macros;
@@ -174,6 +176,7 @@ mod result;
 mod types;
 
 pub use builders::{ArgBuilder, Flag, Opt, Pos};
+pub use completions::Shell;
 pub use free::parse_loose;
 pub use parser::ArgParser;
 pub use result::{OptionError, ParseResult, ParseResultBuilder};
