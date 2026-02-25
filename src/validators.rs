@@ -1,11 +1,13 @@
 use std::fmt;
 use std::sync::Arc;
 
+type ValidatorFn = dyn Fn(&str) -> Result<(), String> + Send + Sync;
+
 /// A value validator: a closure that checks a raw string value,
 /// plus an optional hint string for help text.
 #[derive(Clone)]
 pub struct Validator {
-    func: Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>,
+    func: Arc<ValidatorFn>,
     hint: Option<String>,
 }
 
