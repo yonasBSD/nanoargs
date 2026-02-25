@@ -46,16 +46,25 @@ macro_rules! extract {
             let mut __pos_idx: usize = 0;
             #[allow(unused_variables)]
             let __positionals = __res.get_positionals();
-            $crate::extract!(@munch __res, __pos_idx, __positionals,
-                { /* bindings */ }
-                { /* struct fields */ }
-                { /* field names */ }
-                $($body)*
+            $crate::extract!(@normalize __res, __pos_idx, __positionals,
+                { $($body)* }
             )
         })()
     }};
 
-    // ── TT muncher: flag field (bool) with trailing comma ──────────
+    // ── @normalize: always append trailing comma, then dispatch ────
+    (@normalize $res:expr, $pos_idx:ident, $positionals:ident,
+        { $($body:tt)* }
+    ) => {
+        $crate::extract!(@munch $res, $pos_idx, $positionals,
+            { /* bindings */ }
+            { /* struct fields */ }
+            { /* field names */ }
+            $($body)* ,
+        )
+    };
+
+    // ── TT muncher: flag field (bool) ──────────────────────────────
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -79,30 +88,7 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: flag field (bool) — last field, no trailing comma
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : bool
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: bool = {
-                    let __name = stringify!($field_name).replace('_', "-");
-                    $res.get_flag(&__name)
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : bool,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
-    // ── TT muncher: optional positional (Option<T> as @pos) with trailing comma ──
+    // ── TT muncher: optional positional (Option<T> as @pos) ────────
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -135,39 +121,7 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: optional positional (Option<T> as @pos) — last field ────
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : Option < $inner:ty > as @ pos
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: Option<$inner> = {
-                    let __name = stringify!($field_name);
-                    if $pos_idx < $positionals.len() {
-                        let __val = $positionals[$pos_idx].parse::<$inner>().map_err(|e| $crate::OptionError::ParseFailed {
-                            option: __name.to_string(),
-                            message: e.to_string(),
-                        })?;
-                        $pos_idx += 1;
-                        Some(__val)
-                    } else {
-                        None
-                    }
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : Option<$inner>,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
-    // ── TT muncher: Option<T> field with trailing comma ───────────
+    // ── TT muncher: Option<T> field ────────────────────────────────
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -197,36 +151,7 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: Option<T> field — last field ───────────────────
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : Option < $inner:ty >
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: Option<$inner> = {
-                    let __name = stringify!($field_name).replace('_', "-");
-                    match $res.get_option(&__name) {
-                        Some(v) => Some(v.parse::<$inner>().map_err(|e| $crate::OptionError::ParseFailed {
-                            option: __name.clone(),
-                            message: e.to_string(),
-                        })?),
-                        None => None,
-                    }
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : Option<$inner>,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
-    // ── TT muncher: remaining positionals (Vec<T> as @pos) with trailing comma ──
+    // ── TT muncher: remaining positionals (Vec<T> as @pos) ─────────
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -256,36 +181,7 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: remaining positionals (Vec<T> as @pos) — last field ────
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : Vec < $inner:ty > as @ pos
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: Vec<$inner> = {
-                    let __name = stringify!($field_name);
-                    let __slice = &$positionals[$pos_idx..];
-                    let __parsed: Vec<$inner> = __slice.iter().map(|v| v.parse::<$inner>()).collect::<Result<Vec<$inner>, _>>().map_err(|e| $crate::OptionError::ParseFailed {
-                        option: __name.to_string(),
-                        message: e.to_string(),
-                    })?;
-                    $pos_idx = $positionals.len();
-                    __parsed
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : Vec<$inner>,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
-    // ── TT muncher: Vec<T> field with trailing comma ───────────────
+    // ── TT muncher: Vec<T> field ───────────────────────────────────
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -313,34 +209,7 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: Vec<T> field — last field ──────────────────────
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : Vec < $inner:ty >
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: Vec<$inner> = {
-                    let __name = stringify!($field_name).replace('_', "-");
-                    let __raw = $res.get_option_values(&__name);
-                    __raw.iter().map(|v| v.parse::<$inner>()).collect::<Result<Vec<$inner>, _>>().map_err(|e| $crate::OptionError::ParseFailed {
-                        option: __name.clone(),
-                        message: e.to_string(),
-                    })?
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : Vec<$inner>,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
-    // ── TT muncher: default positional (T as @pos = expr) with trailing comma ──
+    // ── TT muncher: default positional (T as @pos = expr) ──────────
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -373,39 +242,7 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: default positional (T as @pos = expr) — last field ────
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : $ty:ty as @ pos = $default:expr
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: $ty = {
-                    let __name = stringify!($field_name);
-                    if $pos_idx < $positionals.len() {
-                        let __val = $positionals[$pos_idx].parse::<$ty>().map_err(|e| $crate::OptionError::ParseFailed {
-                            option: __name.to_string(),
-                            message: e.to_string(),
-                        })?;
-                        $pos_idx += 1;
-                        __val
-                    } else {
-                        $default
-                    }
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : $ty,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
-    // ── TT muncher: required positional (T as @pos) with trailing comma ──
+    // ── TT muncher: required positional (T as @pos) ────────────────
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -438,39 +275,7 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: required positional (T as @pos) — last field ────
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : $ty:ty as @ pos
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: $ty = {
-                    let __name = stringify!($field_name);
-                    if $pos_idx < $positionals.len() {
-                        let __val = $positionals[$pos_idx].parse::<$ty>().map_err(|e| $crate::OptionError::ParseFailed {
-                            option: __name.to_string(),
-                            message: e.to_string(),
-                        })?;
-                        $pos_idx += 1;
-                        __val
-                    } else {
-                        return Err($crate::OptionError::Missing { option: __name.to_string() });
-                    }
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : $ty,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
-    // ── TT muncher: custom name with default (T as "name" = expr) with trailing comma
+    // ── TT muncher: custom name with default (T as "name" = expr) ──
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -494,30 +299,7 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: custom name with default (T as "name" = expr) — last field
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : $ty:ty as $custom_name:literal = $default:expr
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: $ty = {
-                    let __name: &str = $custom_name;
-                    $res.get_option_or_default::<$ty>(__name, $default)?
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : $ty,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
-    // ── TT muncher: custom name required (T as "name") with trailing comma
+    // ── TT muncher: custom name required (T as "name") ─────────────
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -541,30 +323,7 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: custom name required (T as "name") — last field
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : $ty:ty as $custom_name:literal
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: $ty = {
-                    let __name: &str = $custom_name;
-                    $res.get_option_required::<$ty>(__name)?
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : $ty,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
-    // ── TT muncher: default field (T = expr) with trailing comma ───
+    // ── TT muncher: default field (T = expr) ───────────────────────
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -588,30 +347,7 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: default field (T = expr) — last field ──────────
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : $ty:ty = $default:expr
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: $ty = {
-                    let __name = stringify!($field_name).replace('_', "-");
-                    $res.get_option_or_default::<$ty>(&__name, $default)?
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : $ty,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
-    // ── TT muncher: required field (fallthrough type) with trailing comma
+    // ── TT muncher: required field (fallthrough type) ──────────────
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
         { $($struct_fields:tt)* }
@@ -635,29 +371,6 @@ macro_rules! extract {
         )
     };
 
-    // ── TT muncher: required field (fallthrough type) — last field
-    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
-        { $($bindings:tt)* }
-        { $($struct_fields:tt)* }
-        { $($names:ident)* }
-        $field_name:ident : $ty:ty
-    ) => {
-        $crate::extract!(@munch $res, $pos_idx, $positionals,
-            {
-                $($bindings)*
-                let $field_name: $ty = {
-                    let __name = stringify!($field_name).replace('_', "-");
-                    $res.get_option_required::<$ty>(&__name)?
-                };
-            }
-            {
-                $($struct_fields)*
-                pub $field_name : $ty,
-            }
-            { $($names)* $field_name }
-        )
-    };
-
     // ── TT muncher: base case — all fields consumed, emit struct ───
     (@munch $res:expr, $pos_idx:ident, $positionals:ident,
         { $($bindings:tt)* }
@@ -675,4 +388,36 @@ macro_rules! extract {
             $($names,)*
         })
     }};
+
+    // ── TT muncher: base case — trailing comma from normalize ──────
+    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
+        { $($bindings:tt)* }
+        { $($struct_fields:tt)* }
+        { $($names:ident)* }
+        ,
+    ) => {{
+        $($bindings)*
+
+        #[derive(Debug)]
+        struct __ExtractedFields {
+            $($struct_fields)*
+        }
+
+        Ok::<__ExtractedFields, $crate::OptionError>(__ExtractedFields {
+            $($names,)*
+        })
+    }};
+
+    // ── TT muncher: catch-all — unsupported field syntax ───────────
+    (@munch $res:expr, $pos_idx:ident, $positionals:ident,
+        { $($bindings:tt)* }
+        { $($struct_fields:tt)* }
+        { $($names:ident)* }
+        $($rest:tt)*
+    ) => {
+        compile_error!(concat!(
+            "extract!: unsupported field syntax. Check the field starting near: ",
+            stringify!($($rest)*)
+        ))
+    };
 }
