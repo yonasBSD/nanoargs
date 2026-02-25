@@ -216,6 +216,10 @@ myapp -w10              # sets width to "10"
 # Flags + option in one token
 myapp -abcw10           # sets all, brief, color + width="10"
 myapp -abcw 10          # same — value from next token
+
+# Equals-delimited option value
+myapp -w=10             # sets width to "10"
+myapp -abcw=10          # sets all, brief, color + width="10"
 ```
 
 When the parser encounters an option character during the walk, it claims all remaining characters as the value. If none remain, it consumes the next argument token.

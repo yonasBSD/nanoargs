@@ -3,9 +3,10 @@
 //! Run with:
 //!   cargo run --example short_flags -- -abc
 //!   cargo run --example short_flags -- -w10
+//!   cargo run --example short_flags -- -w=10
 //!   cargo run --example short_flags -- -abcw10
 //!   cargo run --example short_flags -- -abcw 10
-//!   cargo run --example short_flags -- -vvv
+//!   cargo run --example short_flags -- -abcw=10
 
 use nanoargs::{ArgBuilder, Flag, Opt, ParseError};
 

@@ -208,7 +208,7 @@ impl ArgParser {
         let after = &token[1..];
 
         if let Some(eq_pos) = after.find('=') {
-            self.handle_short_eq(after, eq_pos, token, option_values)
+            self.handle_short_eq(after, eq_pos, token, flag_values, option_values)
         } else if after.len() == 1 {
             self.handle_single_short(after, token, args, i, flag_values, option_values)
         } else {
@@ -222,18 +222,26 @@ impl ArgParser {
         after: &str,
         eq_pos: usize,
         full_token: &str,
+        flag_values: &mut HashMap<String, bool>,
         option_values: &mut HashMap<String, Vec<String>>,
     ) -> Result<(), ParseError> {
         let key_str = &after[..eq_pos];
         let value = &after[eq_pos + 1..];
+        let chars: Vec<char> = key_str.chars().collect();
 
-        if key_str.len() == 1 {
-            let ch = key_str.chars().next().unwrap();
-            if let Some(opt) = self.options.iter().find(|o| o.short == Some(ch)) {
-                Self::store_option_value(option_values, &opt.long, value.to_string(), opt.multi)?;
+        // Iterate through all characters except the last: must be registered flags.
+        for &ch in &chars[..chars.len() - 1] {
+            if let Some(flag) = self.flags.iter().find(|f| f.short == Some(ch)) {
+                flag_values.insert(flag.long.clone(), true);
             } else {
                 return Err(ParseError::UnknownArgument(full_token.to_string()));
             }
+        }
+
+        // Last character must be a registered option.
+        let last = *chars.last().unwrap();
+        if let Some(opt) = self.options.iter().find(|o| o.short == Some(last)) {
+            Self::store_option_value(option_values, &opt.long, value.to_string(), opt.multi)?;
         } else {
             return Err(ParseError::UnknownArgument(full_token.to_string()));
         }
