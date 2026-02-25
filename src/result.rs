@@ -204,31 +204,40 @@ impl ParseResult {
         self.subcommand_result.as_deref()
     }
 
-    /// Returns the parsed value, or `default` if the option is absent **or
-    /// its value fails to parse**.
+    /// Returns the parsed value, or `default` if the option is absent.
     ///
-    /// This is a convenience helper that silently falls back to `default`
-    /// on parse failure — `--jobs abc` with a `u32` target quietly returns
-    /// the default, not an error. If you need to distinguish "absent" from
-    /// "bad input", use [`get_option_parsed`] or [`get_option_required`]
-    /// instead.
-    pub fn get_option_or_default<T: FromStr>(&self, name: &str, default: T) -> T {
+    /// Returns `Err(OptionError::ParseFailed)` when the option is present
+    /// but its value cannot be parsed into `T`. The default is only used
+    /// when the option was not provided at all.
+    pub fn get_option_or_default<T: FromStr>(&self, name: &str, default: T) -> Result<T, OptionError>
+    where
+        T::Err: std::fmt::Display,
+    {
         match self.get_option(name) {
-            Some(v) => v.parse::<T>().unwrap_or(default),
-            None => default,
+            Some(v) => v.parse::<T>().map_err(|e| OptionError::ParseFailed {
+                option: name.to_string(),
+                message: e.to_string(),
+            }),
+            None => Ok(default),
         }
     }
 
     /// Returns the parsed value, or calls `f` to produce a fallback if the
-    /// option is absent **or its value fails to parse**.
+    /// option is absent.
     ///
-    /// Like [`get_option_or_default`](Self::get_option_or_default), parse
-    /// errors are silently swallowed. Use [`get_option_parsed`] or
-    /// [`get_option_required`] when bad input should be surfaced.
-    pub fn get_option_or<T: FromStr, F: FnOnce() -> T>(&self, name: &str, f: F) -> T {
+    /// Returns `Err(OptionError::ParseFailed)` when the option is present
+    /// but its value cannot be parsed into `T`. The closure `f` is only
+    /// called when the option was not provided at all.
+    pub fn get_option_or<T: FromStr, F: FnOnce() -> T>(&self, name: &str, f: F) -> Result<T, OptionError>
+    where
+        T::Err: std::fmt::Display,
+    {
         match self.get_option(name) {
-            Some(v) => v.parse::<T>().unwrap_or_else(|_| f()),
-            None => f(),
+            Some(v) => v.parse::<T>().map_err(|e| OptionError::ParseFailed {
+                option: name.to_string(),
+                message: e.to_string(),
+            }),
+            None => Ok(f()),
         }
     }
 
@@ -250,18 +259,23 @@ impl ParseResult {
     }
 
     /// Returns all values parsed into `T`, or `default` if the option is
-    /// absent **or any value fails to parse**.
+    /// absent.
     ///
-    /// Parse errors are silently swallowed — if any single value is
-    /// unparseable, the entire result falls back to `default`. Use
-    /// [`get_option_values_parsed`] for fine-grained error handling.
-    pub fn get_option_values_or_default<T: FromStr>(&self, name: &str, default: Vec<T>) -> Vec<T> {
+    /// Returns `Err(OptionError::ParseFailed)` when any single value
+    /// cannot be parsed into `T`. The default is only used when the option
+    /// was not provided at all.
+    pub fn get_option_values_or_default<T: FromStr>(&self, name: &str, default: Vec<T>) -> Result<Vec<T>, OptionError>
+    where
+        T::Err: std::fmt::Display,
+    {
         let raw = self.get_option_values(name);
         if raw.is_empty() {
-            return default;
+            return Ok(default);
         }
-        let parsed: Result<Vec<T>, _> = raw.iter().map(|v| v.parse::<T>()).collect();
-        parsed.unwrap_or(default)
+        raw.iter().map(|v| v.parse::<T>()).collect::<Result<Vec<T>, _>>().map_err(|e| OptionError::ParseFailed {
+            option: name.to_string(),
+            message: e.to_string(),
+        })
     }
 }
 

@@ -82,8 +82,8 @@
 //! // Options return Option<&str>
 //! let output = result.get_option("output");
 //!
-//! // Typed parsing with default
-//! let count: u32 = result.get_option_or_default("times", 1);
+//! // Typed parsing with default (returns Result — Err on bad parse)
+//! let count: u32 = result.get_option_or_default("times", 1).unwrap();
 //!
 //! // Or require it (returns Result for ? operator)
 //! // let count: u32 = result.get_option_required("times")?;

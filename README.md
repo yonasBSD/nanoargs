@@ -325,16 +325,18 @@ You can also pass your own args with `parser.parse(args)` — see [Error Handlin
 
 ### Typed Parsing
 
-Parse option values into any type implementing `FromStr`. Convenience helpers collapse the common three-way match into a single call:
+Parse option values into any type implementing `FromStr`. Convenience helpers collapse the common three-way match into a single call. All typed helpers return `Result<T, OptionError>`, so parse errors are always surfaced — never silently swallowed:
 
 ```rust
-// With a default fallback — returns the parsed value, or the default if absent/unparseable
-let jobs: u32 = result.get_option_or_default("jobs", 4);
+// With a default fallback — returns Ok(parsed) or Ok(default) if absent.
+// Returns Err on parse failure (e.g. --jobs abc).
+let jobs: u32 = result.get_option_or_default("jobs", 4)?;
 
-// With a lazy default — closure only runs if needed
-let jobs: u32 = result.get_option_or("jobs", || num_cpus());
+// With a lazy default — closure only runs if the option is absent.
+// Returns Err on parse failure without calling the closure.
+let jobs: u32 = result.get_option_or("jobs", || num_cpus())?;
 
-// Required with Result — use the ? operator
+// Required — Err if absent or unparseable
 let jobs: u32 = result.get_option_required("jobs")?;
 ```
 

@@ -47,7 +47,7 @@ fn main() {
             println!("  tags:     {:?}", result.get_option_values("tag"));
 
             // Typed parsing with default fallback
-            let jobs: u32 = result.get_option_or_default("jobs", 4);
+            let jobs: u32 = result.get_option_or_default("jobs", 4).unwrap();
             println!("  jobs:     {} (parsed as u32)", jobs);
 
             println!("\n--- Positionals ---");

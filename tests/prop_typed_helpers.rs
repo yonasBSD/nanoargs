@@ -4,7 +4,7 @@ use common::{arb_identifier, arb_non_numeric_string, arb_u32_string};
 use nanoargs::{OptionError, ParseResultBuilder};
 use proptest::prelude::*;
 
-// Feature: typed-option-helpers, Property 1: get_option_or_default returns parsed value on success
+// Feature: or-default-error-propagation, Property 1: get_option_or_default returns Ok(parsed) on success
 // **Validates: Requirements 1.1**
 proptest! {
     #[test]
@@ -18,12 +18,12 @@ proptest! {
             .option(&name, &val_str)
             .build();
         let actual = result.get_option_or_default::<u32>(&name, default_val);
-        prop_assert_eq!(actual, expected);
+        prop_assert_eq!(actual, Ok(expected));
     }
 }
 
-// Feature: typed-option-helpers, Property 2: get_option_or_default returns default on absent or unparseable
-// **Validates: Requirements 1.2, 1.3**
+// Feature: or-default-error-propagation, Property 2: get_option_or_default returns Ok(default) on absent
+// **Validates: Requirements 1.2**
 proptest! {
     #[test]
     fn prop_get_option_or_default_returns_default_on_absent(
@@ -33,9 +33,13 @@ proptest! {
         // Build a ParseResult WITHOUT the option
         let result = ParseResultBuilder::new().build();
         let actual = result.get_option_or_default::<u32>(&name, default_val);
-        prop_assert_eq!(actual, default_val);
+        prop_assert_eq!(actual, Ok(default_val));
     }
+}
 
+// Feature: or-default-error-propagation, Property 3: get_option_or_default returns Err(ParseFailed) on unparseable
+// **Validates: Requirements 1.3**
+proptest! {
     #[test]
     fn prop_get_option_or_default_returns_default_on_unparseable(
         name in arb_identifier(),
@@ -47,11 +51,17 @@ proptest! {
             .option(&name, &bad_val)
             .build();
         let actual = result.get_option_or_default::<u32>(&name, default_val);
-        prop_assert_eq!(actual, default_val);
+        match actual {
+            Err(OptionError::ParseFailed { option, message }) => {
+                prop_assert_eq!(option, name);
+                prop_assert!(!message.is_empty(), "parse failure message should be non-empty");
+            }
+            other => prop_assert!(false, "expected Err(ParseFailed), got {:?}", other),
+        }
     }
 }
 
-// Feature: typed-option-helpers, Property 3: get_option_or returns parsed value without calling closure
+// Feature: or-default-error-propagation, Property 4: get_option_or returns Ok(parsed) without calling closure
 // **Validates: Requirements 2.1**
 proptest! {
     #[test]
@@ -68,13 +78,13 @@ proptest! {
             closure_called.set(true);
             0
         });
-        prop_assert_eq!(actual, expected);
+        prop_assert_eq!(actual, Ok(expected));
         prop_assert!(!closure_called.get(), "closure should not be called when option is present and parseable");
     }
 }
 
-// Feature: typed-option-helpers, Property 4: get_option_or returns closure result on absent or unparseable
-// **Validates: Requirements 2.2, 2.3**
+// Feature: or-default-error-propagation, Property 5: get_option_or returns Ok(closure_result) on absent
+// **Validates: Requirements 2.2**
 proptest! {
     #[test]
     fn prop_get_option_or_returns_closure_result_on_absent(
@@ -84,9 +94,13 @@ proptest! {
         // Build a ParseResult WITHOUT that option
         let result = ParseResultBuilder::new().build();
         let actual = result.get_option_or::<u32, _>(&name, || fallback);
-        prop_assert_eq!(actual, fallback);
+        prop_assert_eq!(actual, Ok(fallback));
     }
+}
 
+// Feature: or-default-error-propagation, Property 6: get_option_or returns Err(ParseFailed) without calling closure on unparseable
+// **Validates: Requirements 2.3**
+proptest! {
     #[test]
     fn prop_get_option_or_returns_closure_result_on_unparseable(
         name in arb_identifier(),
@@ -97,8 +111,19 @@ proptest! {
         let result = ParseResultBuilder::new()
             .option(&name, &bad_val)
             .build();
-        let actual = result.get_option_or::<u32, _>(&name, || fallback);
-        prop_assert_eq!(actual, fallback);
+        let closure_called = std::cell::Cell::new(false);
+        let actual = result.get_option_or::<u32, _>(&name, || {
+            closure_called.set(true);
+            fallback
+        });
+        match actual {
+            Err(OptionError::ParseFailed { option, message }) => {
+                prop_assert_eq!(option, name);
+                prop_assert!(!message.is_empty(), "parse failure message should be non-empty");
+            }
+            other => prop_assert!(false, "expected Err(ParseFailed), got {:?}", other),
+        }
+        prop_assert!(!closure_called.get(), "closure should not be called when option is present but unparseable");
     }
 }
 
@@ -156,8 +181,8 @@ proptest! {
     }
 }
 
-// Feature: typed-option-helpers, Property 8: get_option_values_or_default returns parsed Vec on all-valid
-// **Validates: Requirements 4.1**
+// Feature: or-default-error-propagation, Property 7: get_option_values_or_default returns Ok(parsed_vec) on all-valid
+// **Validates: Requirements 3.1**
 proptest! {
     #[test]
     fn prop_get_option_values_or_default_returns_parsed_vec_on_all_valid(
@@ -170,12 +195,12 @@ proptest! {
         }
         let result = builder.build();
         let actual = result.get_option_values_or_default::<u32>(&name, vec![]);
-        prop_assert_eq!(actual, values);
+        prop_assert_eq!(actual, Ok(values));
     }
 }
 
-// Feature: typed-option-helpers, Property 9: get_option_values_or_default returns default on absent or any parse failure
-// **Validates: Requirements 4.2, 4.3**
+// Feature: or-default-error-propagation, Property 8: get_option_values_or_default returns Ok(default) on absent
+// **Validates: Requirements 3.2**
 proptest! {
     #[test]
     fn prop_get_option_values_or_default_returns_default_on_absent(
@@ -185,9 +210,13 @@ proptest! {
         // Build a ParseResult WITHOUT that option
         let result = ParseResultBuilder::new().build();
         let actual = result.get_option_values_or_default::<u32>(&name, default_values.clone());
-        prop_assert_eq!(actual, default_values);
+        prop_assert_eq!(actual, Ok(default_values));
     }
+}
 
+// Feature: or-default-error-propagation, Property 9: get_option_values_or_default returns Err(ParseFailed) on any parse failure
+// **Validates: Requirements 3.3**
+proptest! {
     #[test]
     fn prop_get_option_values_or_default_returns_default_on_any_parse_failure(
         name in arb_identifier(),
@@ -207,6 +236,12 @@ proptest! {
         }
         let result = builder.build();
         let actual = result.get_option_values_or_default::<u32>(&name, default_values.clone());
-        prop_assert_eq!(actual, default_values);
+        match actual {
+            Err(OptionError::ParseFailed { option, message }) => {
+                prop_assert_eq!(option, name);
+                prop_assert!(!message.is_empty(), "parse failure message should be non-empty");
+            }
+            other => prop_assert!(false, "expected Err(ParseFailed), got {:?}", other),
+        }
     }
 }

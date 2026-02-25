@@ -33,7 +33,7 @@ fn main() {
             println!("trace-id: {:?} (hidden)", result.get_option("trace-id"));
 
             // Typed parsing with default fallback
-            let jobs: u32 = result.get_option_or_default("jobs", 4);
+            let jobs: u32 = result.get_option_or_default("jobs", 4).unwrap();
             println!("jobs (u32): {}", jobs);
         }
         Err(ParseError::HelpRequested(text)) => print!("{}", text),
