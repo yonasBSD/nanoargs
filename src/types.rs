@@ -159,7 +159,12 @@ impl fmt::Display for ParseError {
                 )
             }
             ParseError::InvalidUtf8(lossy) => {
-                write!(f, "{}argument is not valid UTF-8: {}", error_prefix(), yellow_arg(lossy))
+                write!(
+                    f,
+                    "{}argument is not valid UTF-8: {}",
+                    error_prefix(),
+                    yellow_arg(lossy)
+                )
             }
         }
     }
