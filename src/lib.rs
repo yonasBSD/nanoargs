@@ -88,8 +88,17 @@
 //! // Or require it (returns Result for ? operator)
 //! // let count: u32 = result.get_option_required("times")?;
 //!
+//! // Lazy default via closure
+//! // let count: u32 = result.get_option_or("times", || expensive_default())?;
+//!
+//! // Low-level typed parse: Option<Result<T, Err>>
+//! let parsed: Option<Result<u32, _>> = result.get_option_parsed("times");
+//!
 //! // Multi-value options return &[String]
 //! let tags = result.get_option_values("tags");
+//!
+//! // Typed multi-values with fallback
+//! // let tags: Vec<String> = result.get_option_values_or_default("tags", vec![])?;
 //!
 //! // Positionals in order
 //! let positionals = result.get_positionals();
@@ -159,6 +168,7 @@
 mod builders;
 mod free;
 mod help;
+mod macros;
 mod parser;
 mod result;
 mod types;

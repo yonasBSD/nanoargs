@@ -53,31 +53,35 @@ Which one should I use?
 - `pico-args` / `lexopt`: You’re building something tiny where most features aren't a priority.
 - `nanoargs`: You want a clean, intuitive API that supports 90% of use cases without taking on any dependencies.
 
-## Quick Start ([full demo](examples/full_demo.rs))
+## Quick Start
 
 ```sh
 cargo add nanoargs
 ```
 
 ```rust
-use nanoargs::{ArgBuilder, Flag, Opt, Pos, ParseError};
+use nanoargs::{extract, ArgBuilder, Flag, Opt, Pos, ParseError};
 
 fn main() {
     let parser = ArgBuilder::new()
-        .name("myapp")
-        .description("A sample CLI tool")
+        .name("greet")
         .version("1.0.0")
-        .flag(Flag::new("verbose").desc("Enable verbose output").short('v'))
-        .option(Opt::new("output").placeholder("FILE").desc("Output file path").short('o'))
-        .positional(Pos::new("input").desc("Input file").required())
+        .flag(Flag::new("loud").desc("Shout it").short('l'))
+        .option(Opt::new("name").placeholder("NAME").desc("Who to greet").short('n').required())
+        .positional(Pos::new("greeting").desc("Custom greeting").default("Hello"))
         .build()
         .unwrap();
 
     match parser.parse_env() {
         Ok(result) => {
-            println!("verbose: {}", result.get_flag("verbose"));
-            println!("output:  {:?}", result.get_option("output"));
-            println!("input:   {:?}", result.get_positionals());
+            let opts = extract!(result, {
+                loud: bool,
+                name: String,
+                greeting: String as @pos = "Hello".into(),
+            }).unwrap();
+
+            let msg = format!("{}, {}!", opts.greeting, opts.name);
+            println!("{}", if opts.loud { msg.to_uppercase() } else { msg });
         }
         Err(ParseError::HelpRequested(text)) => print!("{text}"),
         Err(ParseError::VersionRequested(text)) => println!("{text}"),
@@ -86,11 +90,22 @@ fn main() {
 }
 ```
 
-See [Parsing and Results](#parsing-and-results) and [Error Handling](#error-handling) for more details.
+```sh
+$ greet -n World
+Hello, World!
+
+$ greet -n World -l
+HELLO, WORLD!
+
+$ greet -n Rust Hey
+Hey, Rust!
+```
+
+The `extract!` macro gives you typed, validated fields in one shot. See [Extracting Results](#extracting-results) for the full syntax, or [builder_api.rs](examples/builder_api.rs) for the manual accessor API.
 
 ## Defining Arguments
 
-### Flags ([example](examples/flags.rs))
+### Flags
 
 Boolean switches toggled by presence.
 
@@ -106,7 +121,7 @@ myapp --verbose --dry-run
 myapp -v
 ```
 
-### Options ([example](examples/options.rs))
+### Options
 
 Key-value arguments with fluent modifiers. Construct an `Opt` with `Opt::new()`, chain `.placeholder()`, `.desc()`, `.short()`, `.required()`, `.default()`, `.env()`, `.multi()`, or `.hidden()` as needed, then pass it to `.option()`.
 
@@ -124,19 +139,35 @@ myapp --output result.txt --jobs 8 --include src --include tests
 myapp -o=result.txt -j 8
 ```
 
-### Positionals ([example](examples/positionals.rs))
+### Positionals
 
-Unnamed arguments collected in order. Chain `.required()` on the `Pos` builder to make a positional mandatory.
+Unnamed arguments collected in order. Chain `.required()` to make a positional mandatory, `.default(value)` to provide a fallback when omitted, and `.multi()` to collect all remaining arguments into the last positional.
 
 ```rust
 let parser = ArgBuilder::new()
     .positional(Pos::new("input").desc("Input file").required())
-    .positional(Pos::new("extra").desc("Additional arguments"))
+    .positional(Pos::new("output").desc("Output file").default("out.txt"))
+    .positional(Pos::new("extra").desc("Additional arguments").multi())
     .build();
 ```
 
 ```sh
-myapp input.txt extra1 extra2
+myapp input.txt                        # output defaults to "out.txt", extra is empty
+myapp input.txt result.txt a b c       # output = "result.txt", extra = ["a", "b", "c"]
+```
+
+A few rules:
+- A positional cannot be both `.required()` and `.default()` — that's a build-time error.
+- A positional cannot be both `.required()` and `.multi()`.
+- A `.multi()` positional must be the last one registered.
+
+Help text reflects these modifiers automatically:
+
+```
+Positional arguments:
+  <input>        Input file
+  [output]       Output file [default: out.txt]
+  [extra]...     Additional arguments
 ```
 
 ### Environment Variable Fallback ([example](examples/env_fallback.rs))
@@ -193,7 +224,7 @@ myapp --help
 
 The `.hidden()` modifier is available on both `Flag` and `Opt`, and can be called in any order relative to other modifiers.
 
-### Combined Short Flags ([example](examples/short_flags.rs))
+### Combined Short Flags
 
 Combine multiple short flags into a single token. The parser walks characters left-to-right against the registered schema.
 
@@ -267,7 +298,7 @@ myapp build --help        # subcommand-specific help
 > myapp file.txt build    # "file.txt" is treated as an unknown subcommand
 > ```
 
-### Version Flag ([example](examples/version_flag.rs))
+### Version Flag
 
 Built-in `--version` / `-V` support. Set a version string on the builder and the parser handles the rest.
 
@@ -321,6 +352,8 @@ if let Some(name) = result.subcommand() {
 
 Accessors like `get_flag` and `get_option` use string keys, so a typo like `get_flag("verbos")` would silently return `false`. To catch these during development, nanoargs includes `debug_assert!` checks that panic if you access a name that was never registered. These checks run automatically in debug builds (`cargo test`, `cargo run`) and are stripped in release builds with zero overhead.
 
+For the full manual accessor API (all `get_option_*` variants, `get_option_values_*`, etc.), see [builder_api.rs](examples/builder_api.rs).
+
 You can also pass your own args with `parser.parse(args)` — see [Error Handling](#error-handling) for the full match pattern.
 
 ### Typed Parsing
@@ -350,6 +383,56 @@ match result.get_option_parsed::<u32>("jobs") {
 }
 ```
 
+### Extracting Results ([example](examples/extract.rs))
+
+The `extract!` macro is the recommended way to pull typed values out of a `ParseResult`. It replaces scattered `get_flag` / `get_option_required` / `get_option_or_default` calls with a single declaration:
+
+```rust
+let opts = nanoargs::extract!(result, {
+    verbose: bool,                   // flag
+    output: String,                  // required option (parsed via FromStr)
+    jobs: u32 = 4,                   // option with default
+    format: Option<String>,          // optional — None if absent
+    tag: Vec<String>,                // multi-value option
+}).unwrap();
+
+println!("{} {} {:?}", opts.output, opts.jobs, opts.tag);
+```
+
+Field names are automatically mapped to CLI option names by converting underscores to hyphens (`listen_port` → `"listen-port"`). Override with `as "name"` when needed:
+
+```rust
+let opts = nanoargs::extract!(result, {
+    port: u16 as "listen-port",              // custom name, required
+    workers: u32 as "num-workers" = 4,       // custom name with default
+}).unwrap();
+```
+
+Positional arguments can be extracted with `as @pos` — no more manual indexing into `get_positionals()`:
+
+```rust
+let opts = nanoargs::extract!(result, {
+    verbose: bool,
+    output: String,
+    input: String as @pos,                   // required positional (index 0)
+    extra: Option<String> as @pos,           // optional positional (index 1, None if absent)
+    files: Vec<String> as @pos,              // all remaining positionals from index 2 onward
+}).unwrap();
+```
+
+Positional indices are assigned sequentially among `@pos` fields (non-`@pos` fields don't consume indices). The full set of positional variants:
+
+| Syntax | Behavior |
+|--------|----------|
+| `name: T as @pos` | Required — error if absent |
+| `name: Option<T> as @pos` | Optional — `None` if absent |
+| `name: T as @pos = expr` | Default — falls back to `expr` if absent (macro-level only, not visible in `--help`) |
+| `name: Vec<T> as @pos` | Remaining — collects all from current index onward |
+
+Declare them in order: required → optional/default → `Vec` (remaining). `Vec<T> as @pos` must be last since it consumes all remaining positionals.
+
+The macro returns `Result<Struct, OptionError>`, so use `.unwrap()` or `?` as appropriate. The `ParseResult` is borrowed, so you can still call accessors afterward.
+
 ### Error Handling ([example](examples/error_handling.rs))
 
 ```rust
@@ -376,16 +459,19 @@ Auto-generated from your schema. Triggered by `--help` or `-h`.
 
 ```sh
 $ myapp --help
-Usage: myapp [OPTIONS] <input> [extra]
-
 A sample CLI tool
+
+Usage: myapp [OPTIONS] <input> [extra]
 
 Options:
   -v, --verbose          Enable verbose output
       --dry-run          Simulate without side effects
   -o, --output <FILE>    Output file path (required)
   -j, --jobs <NUM>       Parallel jobs [default: 4]
-  -h, --help             Print help
+
+Positional arguments:
+  input                  Input file (required)
+  extra                  Additional arguments
 ```
 
 ### Colored Help (opt-in)
@@ -437,23 +523,14 @@ See the [full API docs on docs.rs](https://docs.rs/nanoargs/latest/nanoargs/).
 
 ## Examples
 
-<details>
-<summary>Click to expand all examples</summary>
-
 | Example | Description | Run |
 |---------|-------------|-----|
-| [flags](examples/flags.rs) | Boolean flags | `cargo run --example flags -- -v --dry-run` |
-| [options](examples/options.rs) | Options with defaults and required | `cargo run --example options -- -o=out.txt -j 8` |
-| [positionals](examples/positionals.rs) | Positional arguments | `cargo run --example positionals -- file.txt extra` |
-| [short_flags](examples/short_flags.rs) | Combined short flags and attached values | `cargo run --example short_flags -- -abcw10` |
-| [help_text](examples/help_text.rs) | Auto-generated help | `cargo run --example help_text -- --help` |
-| [error_handling](examples/error_handling.rs) | Error handling patterns | `cargo run --example error_handling` |
-| [version_flag](examples/version_flag.rs) | Built-in version flag | `cargo run --example version_flag -- --version` |
+| [extract](examples/extract.rs) | `extract!` macro — the recommended API | `cargo run --example extract -- -o=result.txt -j 8 input.txt` |
+| [builder_api](examples/builder_api.rs) | Manual builder API for power users | `cargo run --example builder_api -- -o result.txt -j 8 -v input.txt` |
+| [subcommands](examples/subcommands.rs) | Git-style subcommands with `extract!` | `cargo run --example subcommands -- build --release` |
 | [env_fallback](examples/env_fallback.rs) | Environment variable fallback | `cargo run --example env_fallback -- --output out.txt` |
-| [subcommands](examples/subcommands.rs) | Git-style subcommands | `cargo run --example subcommands -- build --release` |
-| [full_demo](examples/full_demo.rs) | All features together | `cargo run --example full_demo -- -vj8 -o=result.txt input.txt` |
-
-</details>
+| [error_handling](examples/error_handling.rs) | `ParseError` variant handling | `cargo run --example error_handling` |
+| [help_text](examples/help_text.rs) | Auto-generated help text | `cargo run --example help_text -- --help` |
 
 ## Contributing
 

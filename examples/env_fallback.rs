@@ -1,10 +1,16 @@
-//! Example: Environment variable fallback for options
+//! Example: Environment variable fallback
 //!
-//! Run with: cargo run --example env_fallback -- --output result.txt
-//! Or set env vars and omit the flags:
+//! Demonstrates the `.env()` modifier on options, which enables CLI > env > default
+//! precedence. If a value is not provided on the command line, nanoargs checks the
+//! named environment variable before falling back to a default (if configured).
+//!
+//! Run with:
+//!   cargo run --example env_fallback -- --output result.txt
+//!   cargo run --example env_fallback -- --output result.txt --format json --log-level debug
 //!   MYAPP_OUTPUT=from_env.txt MYAPP_FORMAT=json cargo run --example env_fallback
+//!   cargo run --example env_fallback -- --help
 
-use nanoargs::{ArgBuilder, Opt, ParseError};
+use nanoargs::{extract, ArgBuilder, Opt, ParseError};
 
 fn main() {
     let parser = ArgBuilder::new()
@@ -20,14 +26,20 @@ fn main() {
         .build()
         .unwrap();
 
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    match parser.parse(args) {
+    match parser.parse_env() {
         Ok(result) => {
-            println!("output:    {:?}", result.get_option("output"));
-            println!("format:    {:?}", result.get_option("format"));
-            println!("log-level: {:?}", result.get_option("log-level"));
+            let opts = extract!(result, {
+                output: String,
+                format: String = "text".into(),
+                log_level: Option<String>,
+            })
+            .unwrap();
+
+            println!("output:    {}", opts.output);
+            println!("format:    {}", opts.format);
+            println!("log-level: {:?}", opts.log_level);
         }
-        Err(ParseError::HelpRequested(text)) => print!("{}", text),
-        Err(e) => eprintln!("error: {}", e),
+        Err(ParseError::HelpRequested(text)) => print!("{text}"),
+        Err(e) => eprintln!("error: {e}"),
     }
 }

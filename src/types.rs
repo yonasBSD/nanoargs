@@ -47,6 +47,10 @@ pub struct PositionalDef {
     pub description: String,
     /// When `true`, parsing fails if this positional is not provided.
     pub required: bool,
+    /// Default value used when the positional is absent from CLI args.
+    pub default: Option<String>,
+    /// When `true`, this positional collects all remaining arguments.
+    pub multi: bool,
 }
 
 /// Definition of a subcommand: a name, description, and its own [`ArgParser`].

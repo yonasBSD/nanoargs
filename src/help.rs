@@ -151,10 +151,11 @@ impl ArgParser {
             out.push_str(&format!(" {}", cyan("<SUBCOMMAND>")));
         } else {
             for pos in &self.positionals {
+                let suffix = if pos.multi { "..." } else { "" };
                 if pos.required {
-                    out.push_str(&format!(" {}", cyan(&format!("<{}>", pos.name))));
+                    out.push_str(&format!(" {}{}", cyan(&format!("<{}>", pos.name)), suffix));
                 } else {
-                    out.push_str(&format!(" {}", cyan(&format!("[{}]", pos.name))));
+                    out.push_str(&format!(" {}{}", cyan(&format!("[{}]", pos.name)), suffix));
                 }
             }
         }
@@ -216,15 +217,20 @@ impl ArgParser {
                 .positionals
                 .iter()
                 .map(|pos| {
-                    let label = green(&pos.name);
+                    let multi_suffix = if pos.multi { "..." } else { "" };
+                    let label = format!("{}{}", green(&pos.name), multi_suffix);
                     let req = if pos.required {
                         format!(" {}", dim("(required)"))
                     } else {
                         String::new()
                     };
+                    let default_hint = match &pos.default {
+                        Some(val) => format!(" {}", dim(&format!("[default: {val}]"))),
+                        None => String::new(),
+                    };
                     HelpEntry {
                         label,
-                        description: format!("{}{req}", pos.description),
+                        description: format!("{}{req}{default_hint}", pos.description),
                     }
                 })
                 .collect();

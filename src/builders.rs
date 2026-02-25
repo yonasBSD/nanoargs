@@ -158,13 +158,16 @@ impl From<Opt> for OptionDef {
 
 /// Standalone builder for defining a positional argument.
 ///
-/// Construct with [`Pos::new()`], optionally chain [`.desc()`](Pos::desc),
-/// [`.required()`](Pos::required), then pass to [`ArgBuilder::positional()`].
+/// Construct with [`Pos::new()`], chain modifiers like [`.desc()`](Pos::desc),
+/// [`.required()`](Pos::required), [`.default()`](Pos::default), and
+/// [`.multi()`](Pos::multi), then pass to [`ArgBuilder::positional()`].
 #[derive(Clone, Debug)]
 pub struct Pos {
     name: String,
     description: String,
     required: bool,
+    default: Option<String>,
+    multi: bool,
 }
 
 impl Pos {
@@ -174,6 +177,8 @@ impl Pos {
             name: name.to_string(),
             description: String::new(),
             required: false,
+            default: None,
+            multi: false,
         }
     }
 
@@ -188,6 +193,18 @@ impl Pos {
         self.required = true;
         self
     }
+
+    /// Set a default value for this positional argument.
+    pub fn default(mut self, value: &str) -> Self {
+        self.default = Some(value.to_string());
+        self
+    }
+
+    /// Mark this positional as collecting all remaining arguments.
+    pub fn multi(mut self) -> Self {
+        self.multi = true;
+        self
+    }
 }
 
 impl From<Pos> for PositionalDef {
@@ -196,6 +213,8 @@ impl From<Pos> for PositionalDef {
             name: p.name,
             description: p.description,
             required: p.required,
+            default: p.default,
+            multi: p.multi,
         }
     }
 }
@@ -342,6 +361,34 @@ impl ArgBuilder {
                     ));
                 }
             }
+        }
+
+        // Validate positional configurations
+        for pos in &self.positionals {
+            if pos.required && pos.default.is_some() {
+                return Err(ParseError::InvalidFormat(format!(
+                    "positional '{}' cannot be both required and have a default",
+                    pos.name
+                )));
+            }
+            if pos.required && pos.multi {
+                return Err(ParseError::InvalidFormat(format!(
+                    "positional '{}' cannot be both required and multi",
+                    pos.name
+                )));
+            }
+        }
+        if let Some(pos) = self
+            .positionals
+            .iter()
+            .enumerate()
+            .find(|(i, p)| p.multi && *i < self.positionals.len() - 1)
+            .map(|(_, p)| p)
+        {
+            return Err(ParseError::InvalidFormat(format!(
+                "multi positional '{}' must be the last positional",
+                pos.name
+            )));
         }
 
         Ok(ArgParser {

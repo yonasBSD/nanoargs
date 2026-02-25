@@ -222,8 +222,12 @@ impl ParseResult {
         }
     }
 
-    /// Returns the parsed value, or calls `f` to produce a fallback if the
-    /// option is absent.
+    /// Returns the parsed value, or calls `f` to produce a lazy fallback
+    /// if the option is absent.
+    ///
+    /// Like [`get_option_or_default`](Self::get_option_or_default), but the
+    /// fallback is computed on demand via a closure. Useful when the default
+    /// is expensive to create (e.g. detecting CPU count).
     ///
     /// Returns `Err(OptionError::ParseFailed)` when the option is present
     /// but its value cannot be parsed into `T`. The closure `f` is only
@@ -279,8 +283,9 @@ impl ParseResult {
     }
 }
 
-/// Error returned by `get_option_required` when the option is missing or
-/// its value cannot be parsed.
+/// Error returned by typed accessor methods (`get_option_required`,
+/// `get_option_or_default`, `get_option_or`, `get_option_values_or_default`,
+/// and `extract!`) when an option is missing or its value cannot be parsed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OptionError {
     /// The option was not provided on the command line.

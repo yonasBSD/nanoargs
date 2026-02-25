@@ -393,6 +393,18 @@ impl ArgParser {
 
         Self::apply_option_fallbacks(&self.options, &mut option_values)?;
 
+        // Apply defaults for missing positionals
+        for (idx, pos) in self.positionals.iter().enumerate() {
+            if idx >= positional_values.len() {
+                if let Some(ref default) = pos.default {
+                    while positional_values.len() < idx {
+                        positional_values.push(String::new());
+                    }
+                    positional_values.push(default.clone());
+                }
+            }
+        }
+
         // Post-parse validation: required positionals
         for (idx, pos) in self.positionals.iter().enumerate() {
             if pos.required && idx >= positional_values.len() {
@@ -447,7 +459,12 @@ impl ArgParser {
         }
     }
 
-    /// Parse arguments from `std::env::args()`, skipping the program name.
+    /// Parse arguments directly from `std::env::args()`, skipping the
+    /// program name (argv[0]).
+    ///
+    /// This is the recommended entry point for real CLI applications.
+    /// Returns `Err(ParseError::InvalidUtf8(_))` if any argument contains
+    /// bytes that are not valid UTF-8.
     pub fn parse_env(&self) -> Result<ParseResult, ParseError> {
         let mut args = Vec::new();
         for os_arg in std::env::args_os().skip(1) {

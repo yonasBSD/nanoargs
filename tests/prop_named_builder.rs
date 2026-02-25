@@ -115,6 +115,8 @@ proptest! {
             name: name.clone(),
             description: desc.unwrap_or_default(),
             required: false,
+            default: None,
+            multi: false,
         };
         prop_assert_eq!(&positionals[0], &expected);
     }
