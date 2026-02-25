@@ -87,6 +87,22 @@ impl ArgParser {
         Ok(result)
     }
 
+    /// Validate a value against an optional validator, mapping errors to `ParseError::ValidationFailed`.
+    fn validate_value(
+        name: &str,
+        value: &str,
+        validator: &Option<crate::validators::Validator>,
+    ) -> Result<(), ParseError> {
+        if let Some(v) = validator {
+            v.validate(value).map_err(|msg| ParseError::ValidationFailed {
+                name: name.to_string(),
+                message: msg,
+            })
+        } else {
+            Ok(())
+        }
+    }
+
     /// Store an option value into the unified map. For multi-value options,
     /// values are appended; for single-value options, errors if already set.
     fn store_option_value(
@@ -94,7 +110,9 @@ impl ArgParser {
         key: &str,
         value: String,
         multi: bool,
+        validator: &Option<crate::validators::Validator>,
     ) -> Result<(), ParseError> {
+        Self::validate_value(key, &value, validator)?;
         if multi {
             values.entry(key.to_string()).or_default().push(value);
         } else if values.contains_key(key) {
@@ -174,7 +192,7 @@ impl ArgParser {
             let value = &after[eq_pos + 1..];
 
             if let Some(opt) = self.options.iter().find(|o| o.long == key) {
-                Self::store_option_value(option_values, key, value.to_string(), opt.multi)?;
+                Self::store_option_value(option_values, key, value.to_string(), opt.multi, &opt.validator.clone())?;
             } else {
                 return Err(ParseError::UnknownArgument(full_token.to_string()));
             }
@@ -188,7 +206,7 @@ impl ArgParser {
                     return Err(ParseError::MissingValue(key.to_string()));
                 }
                 *i += 1;
-                Self::store_option_value(option_values, key, args[*i].clone(), opt.multi)?;
+                Self::store_option_value(option_values, key, args[*i].clone(), opt.multi, &opt.validator.clone())?;
             } else {
                 return Err(ParseError::UnknownArgument(full_token.to_string()));
             }
@@ -241,7 +259,13 @@ impl ArgParser {
         // Last character must be a registered option.
         let last = *chars.last().unwrap();
         if let Some(opt) = self.options.iter().find(|o| o.short == Some(last)) {
-            Self::store_option_value(option_values, &opt.long, value.to_string(), opt.multi)?;
+            Self::store_option_value(
+                option_values,
+                &opt.long,
+                value.to_string(),
+                opt.multi,
+                &opt.validator.clone(),
+            )?;
         } else {
             return Err(ParseError::UnknownArgument(full_token.to_string()));
         }
@@ -271,7 +295,13 @@ impl ArgParser {
                 return Err(ParseError::MissingValue(opt.long.clone()));
             }
             *i += 1;
-            Self::store_option_value(option_values, &opt.long, args[*i].clone(), opt.multi)?;
+            Self::store_option_value(
+                option_values,
+                &opt.long,
+                args[*i].clone(),
+                opt.multi,
+                &opt.validator.clone(),
+            )?;
         } else {
             return Err(ParseError::UnknownArgument(full_token.to_string()));
         }
@@ -310,13 +340,19 @@ impl ArgParser {
             } else if let Some(opt) = self.options.iter().find(|o| o.short == Some(ch)) {
                 if j + 1 < chars.len() {
                     let value: String = chars[j + 1..].iter().collect();
-                    Self::store_option_value(option_values, &opt.long, value, opt.multi)?;
+                    Self::store_option_value(option_values, &opt.long, value, opt.multi, &opt.validator.clone())?;
                 } else {
                     if *i + 1 >= args.len() {
                         return Err(ParseError::MissingValue(opt.long.clone()));
                     }
                     *i += 1;
-                    Self::store_option_value(option_values, &opt.long, args[*i].clone(), opt.multi)?;
+                    Self::store_option_value(
+                        option_values,
+                        &opt.long,
+                        args[*i].clone(),
+                        opt.multi,
+                        &opt.validator.clone(),
+                    )?;
                 }
                 break;
             } else {
@@ -347,6 +383,9 @@ impl ArgParser {
                                 vec![val]
                             };
                             if !resolved.is_empty() {
+                                for v in &resolved {
+                                    Self::validate_value(&opt.long, v, &opt.validator)?;
+                                }
                                 values.insert(opt.long.clone(), resolved);
                                 continue;
                             }
@@ -355,6 +394,7 @@ impl ArgParser {
                 }
                 // Try default
                 if let Some(ref default) = opt.default {
+                    Self::validate_value(&opt.long, default, &opt.validator)?;
                     values.insert(opt.long.clone(), vec![default.clone()]);
                 } else if opt.required {
                     return Err(ParseError::MissingRequired(opt.long.clone()));
@@ -409,6 +449,13 @@ impl ArgParser {
         for (idx, pos) in self.positionals.iter().enumerate() {
             if pos.required && idx >= positional_values.len() {
                 return Err(ParseError::MissingRequired(pos.name.clone()));
+            }
+        }
+
+        // Validate positional values
+        for (idx, pos) in self.positionals.iter().enumerate() {
+            if idx < positional_values.len() {
+                Self::validate_value(&pos.name, &positional_values[idx], &pos.validator)?;
             }
         }
 

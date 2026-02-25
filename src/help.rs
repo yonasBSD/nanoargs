@@ -203,9 +203,18 @@ impl ArgParser {
                     Some(var) => format!(" {}", dim(&format!("[env: {var}]"))),
                     None => String::new(),
                 };
+                let validator_hint = opt
+                    .validator
+                    .as_ref()
+                    .and_then(|v| v.hint())
+                    .map(|h| format!(" {}", dim(&format!("[{h}]"))))
+                    .unwrap_or_default();
                 entries.push(HelpEntry {
                     label,
-                    description: format!("{}{req}{multi_hint}{default_hint}{env_hint}", opt.description),
+                    description: format!(
+                        "{}{req}{multi_hint}{default_hint}{env_hint}{validator_hint}",
+                        opt.description
+                    ),
                 });
             }
             out.push_str(&format_section("Options:", &entries));
@@ -228,9 +237,15 @@ impl ArgParser {
                         Some(val) => format!(" {}", dim(&format!("[default: {val}]"))),
                         None => String::new(),
                     };
+                    let validator_hint = pos
+                        .validator
+                        .as_ref()
+                        .and_then(|v| v.hint())
+                        .map(|h| format!(" {}", dim(&format!("[{h}]"))))
+                        .unwrap_or_default();
                     HelpEntry {
                         label,
-                        description: format!("{}{req}{default_hint}", pos.description),
+                        description: format!("{}{req}{default_hint}{validator_hint}", pos.description),
                     }
                 })
                 .collect();

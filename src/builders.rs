@@ -1,5 +1,6 @@
 use crate::parser::ArgParser;
 use crate::types::*;
+use crate::validators::Validator;
 
 /// Standalone builder for defining a boolean flag argument.
 ///
@@ -71,6 +72,7 @@ pub struct Opt {
     env_var: Option<String>,
     multi: bool,
     hidden: bool,
+    validator: Option<Validator>,
 }
 
 impl Opt {
@@ -88,6 +90,7 @@ impl Opt {
             env_var: None,
             multi: false,
             hidden: false,
+            validator: None,
         }
     }
 
@@ -138,6 +141,12 @@ impl Opt {
         self.hidden = true;
         self
     }
+
+    /// Attach a validator to this option.
+    pub fn validate(mut self, v: Validator) -> Self {
+        self.validator = Some(v);
+        self
+    }
 }
 
 impl From<Opt> for OptionDef {
@@ -152,6 +161,7 @@ impl From<Opt> for OptionDef {
             env_var: o.env_var,
             multi: o.multi,
             hidden: o.hidden,
+            validator: o.validator,
         }
     }
 }
@@ -168,6 +178,7 @@ pub struct Pos {
     required: bool,
     default: Option<String>,
     multi: bool,
+    validator: Option<Validator>,
 }
 
 impl Pos {
@@ -179,6 +190,7 @@ impl Pos {
             required: false,
             default: None,
             multi: false,
+            validator: None,
         }
     }
 
@@ -205,6 +217,12 @@ impl Pos {
         self.multi = true;
         self
     }
+
+    /// Attach a validator to this positional.
+    pub fn validate(mut self, v: Validator) -> Self {
+        self.validator = Some(v);
+        self
+    }
 }
 
 impl From<Pos> for PositionalDef {
@@ -215,6 +233,7 @@ impl From<Pos> for PositionalDef {
             required: p.required,
             default: p.default,
             multi: p.multi,
+            validator: p.validator,
         }
     }
 }

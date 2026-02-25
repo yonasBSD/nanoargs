@@ -38,6 +38,7 @@ proptest! {
             env_var: env_val.clone(),
             multi: use_multi,
             hidden: false,
+            validator: None,
         };
         prop_assert_eq!(&opts[0], &expected);
     }

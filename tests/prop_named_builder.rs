@@ -80,6 +80,7 @@ proptest! {
             env_var: None,
             multi: false,
             hidden: false,
+            validator: None,
         };
         prop_assert_eq!(&opts[0], &expected);
     }
@@ -117,6 +118,7 @@ proptest! {
             required: false,
             default: None,
             multi: false,
+            validator: None,
         };
         prop_assert_eq!(&positionals[0], &expected);
     }

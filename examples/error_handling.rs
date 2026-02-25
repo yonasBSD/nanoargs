@@ -10,10 +10,11 @@
 //!   cargo run --example error_handling -- --output                     (MissingValue)
 //!   cargo run --example error_handling -- --unknown                    (UnknownArgument)
 //!   cargo run --example error_handling -- --output a --output b input.txt  (DuplicateOption)
+//!   cargo run --example error_handling -- --port abc input.txt             (ValidationFailed)
 //!   cargo run --example error_handling -- --help                       (HelpRequested)
 //!   cargo run --example error_handling -- --version                    (VersionRequested)
 
-use nanoargs::{ArgBuilder, Opt, ParseError, Pos};
+use nanoargs::{range, ArgBuilder, Opt, ParseError, Pos};
 
 fn main() {
     let parser = ArgBuilder::new()
@@ -21,6 +22,14 @@ fn main() {
         .description("Demonstrates ParseError variant handling")
         .version("0.1.0")
         .option(Opt::new("output").placeholder("FILE").desc("Output file").short('o').required())
+        .option(
+            Opt::new("port")
+                .placeholder("NUM")
+                .desc("Port number")
+                .short('p')
+                .default("8080")
+                .validate(range(1, 65535)),
+        )
         .positional(Pos::new("input").desc("Input file").required())
         .build()
         .unwrap();
@@ -47,6 +56,10 @@ fn main() {
         Err(ParseError::DuplicateOption(name)) => {
             eprintln!("Option --{name} was provided more than once.");
             eprintln!("Hint: this option only accepts a single value.");
+        }
+        Err(ParseError::ValidationFailed { name, message }) => {
+            eprintln!("Validation failed for {name}: {message}");
+            eprintln!("Hint: check the allowed values with --help.");
         }
         Err(e) => eprintln!("error: {e}"),
     }

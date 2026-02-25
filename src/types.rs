@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::parser::ArgParser;
+use crate::validators::Validator;
 
 /// Definition of a boolean flag (e.g. `--verbose` / `-v`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -36,6 +37,8 @@ pub struct OptionDef {
     pub multi: bool,
     /// When `true`, this option is omitted from help text but still parsed.
     pub hidden: bool,
+    /// Optional value validator invoked during parsing.
+    pub validator: Option<Validator>,
 }
 
 /// Definition of a positional argument (e.g. `<input>` or `[extra]`).
@@ -51,6 +54,8 @@ pub struct PositionalDef {
     pub default: Option<String>,
     /// When `true`, this positional collects all remaining arguments.
     pub multi: bool,
+    /// Optional value validator invoked during parsing.
+    pub validator: Option<Validator>,
 }
 
 /// Definition of a subcommand: a name, description, and its own [`ArgParser`].
@@ -95,6 +100,13 @@ pub enum ParseError {
     /// A command-line argument contained bytes that are not valid UTF-8.
     /// Contains the lossy representation.
     InvalidUtf8(String),
+    /// A value failed validation. Contains the argument name and error message.
+    ValidationFailed {
+        /// The argument name (e.g. option long name or positional name).
+        name: String,
+        /// The human-readable validation error message.
+        message: String,
+    },
 }
 
 // ── Leaf colorization helpers for ParseError ───────────────────────────────
@@ -168,6 +180,14 @@ impl fmt::Display for ParseError {
                     "{}argument is not valid UTF-8: {}",
                     error_prefix(),
                     yellow_arg(lossy)
+                )
+            }
+            ParseError::ValidationFailed { name, message } => {
+                write!(
+                    f,
+                    "{}validation failed for {}: {message}",
+                    error_prefix(),
+                    yellow_arg(name)
                 )
             }
         }
